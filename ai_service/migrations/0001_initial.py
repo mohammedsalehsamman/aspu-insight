@@ -1,0 +1,56 @@
+from django.conf import settings
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name='IEEECheckReport',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('pdf_file', models.FileField(upload_to='ieee_pdfs/%Y/%m/', verbose_name='ملف PDF')),
+                ('original_filename', models.CharField(blank=True, max_length=255, verbose_name='اسم الملف الأصلي')),
+                ('paper_title', models.CharField(blank=True, max_length=500, verbose_name='عنوان الورقة')),
+                ('detected_language', models.CharField(blank=True, max_length=10, verbose_name='اللغة المكتشفة')),
+                ('total_pages', models.PositiveIntegerField(default=0, verbose_name='عدد الصفحات')),
+                ('total_citations_in_text', models.PositiveIntegerField(default=0, verbose_name='الاستشهادات في النص')),
+                ('total_references', models.PositiveIntegerField(default=0, verbose_name='إجمالي المراجع')),
+                ('missing_citations_count', models.PositiveIntegerField(default=0, verbose_name='استشهادات بدون مراجع')),
+                ('unused_references_count', models.PositiveIntegerField(default=0, verbose_name='مراجع غير مُستخدمة')),
+                ('citation_matching_score', models.FloatField(default=0.0, verbose_name='درجة تطابق الاستشهادات')),
+                ('format_score', models.FloatField(default=0.0, verbose_name='درجة التنسيق')),
+                ('crossref_score', models.FloatField(default=0.0, verbose_name='درجة Crossref')),
+                ('overall_score', models.FloatField(default=0.0, verbose_name='الدرجة الكلية')),
+                ('status', models.CharField(
+                    choices=[('pending', 'قيد المعالجة'), ('pass', 'مقبول'), ('warning', 'يحتاج تحسين'), ('fail', 'يحتاج مراجعة'), ('error', 'خطأ في المعالجة')],
+                    default='pending', max_length=10, verbose_name='الحالة'
+                )),
+                ('summary', models.TextField(blank=True, verbose_name='الملخص')),
+                ('full_result', models.JSONField(default=dict, verbose_name='النتيجة الكاملة')),
+                ('crossref_checked', models.PositiveIntegerField(default=0, verbose_name='DOIs تم التحقق منها')),
+                ('crossref_verified', models.PositiveIntegerField(default=0, verbose_name='DOIs صحيحة')),
+                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='تاريخ الإنشاء')),
+                ('processing_time_seconds', models.FloatField(blank=True, null=True, verbose_name='وقت المعالجة (ثانية)')),
+                ('requested_by', models.ForeignKey(
+                    blank=True, null=True,
+                    on_delete=django.db.models.deletion.SET_NULL,
+                    related_name='ieee_reports',
+                    to=settings.AUTH_USER_MODEL,
+                    verbose_name='طُلب من قِبل'
+                )),
+            ],
+            options={
+                'verbose_name': 'تقرير IEEE',
+                'verbose_name_plural': 'تقارير IEEE',
+                'ordering': ['-created_at'],
+            },
+        ),
+    ]
