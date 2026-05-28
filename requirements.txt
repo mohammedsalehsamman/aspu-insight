@@ -25,3 +25,8 @@ vine==5.1.0
 wcwidth==0.7.0
 python-docx==1.1.2
 pdfplumber==0.11.3
+django-cors-headers>=4.3
+django-filter>=23.5
+python-decouple>=3.8
+Pillow>=10.0
+drf-spectacular>=0.27
