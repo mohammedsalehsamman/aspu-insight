@@ -21,6 +21,7 @@ class IEEECheckReport(models.Model):
 
     pdf_file = models.FileField(
         upload_to='ieee_documents/%Y/%m/',
+        max_length=500,
         verbose_name='ملف البحث (PDF/DOCX)',
     )
     original_filename = models.CharField(max_length=255, blank=True, verbose_name='اسم الملف الأصلي')
