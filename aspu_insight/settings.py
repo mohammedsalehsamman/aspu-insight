@@ -52,6 +52,13 @@ INSTALLED_APPS = [
     'ai_service',
     'dashboard',
     'notifications',
+    'committeeMember',
+    'assistantReview',
+    'editorReview',
+    'committeeDecision',
+    'reviewerinvitation',
+    'researchHistory '
+    
 ]
 
 MIDDLEWARE = [
