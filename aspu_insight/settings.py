@@ -57,7 +57,7 @@ INSTALLED_APPS = [
     'editorReview',
     'committeeDecision',
     'reviewerinvitation',
-    'researchHistory '
+    'researchHistory'
     
 ]
 
