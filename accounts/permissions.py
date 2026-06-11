@@ -23,6 +23,17 @@ class IsEditor(BasePermission):
         )
 
 
+class IsAssistantEditor(BasePermission):
+    message = 'this action is only allowed for assistant editors.'
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in ['reviewer_assistant', 'admin']
+        )
+
+
 class IsReviewer(BasePermission):
     message = 'this action is only allowed for reviewers.'
 
