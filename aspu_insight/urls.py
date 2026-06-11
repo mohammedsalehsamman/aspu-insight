@@ -50,6 +50,18 @@ urlpatterns = [
         include('research.urls')
     ),
 
+    # Assistant Editor Review APIs
+    path(
+        'api/research/',
+        include('assistantReview.urls')
+    ),
+
+    # Editor Review APIs
+    path(
+        'api/research/',
+        include('editorReview.urls')
+    ),
+
     # Swagger / OpenAPI
     path(
         'api/schema/',
