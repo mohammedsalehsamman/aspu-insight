@@ -3,6 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 
 from . import views
 
+
 auth_urlpatterns = [
     path('register/', views.RegisterView.as_view(), name='auth-register'),
     path('verify-email/', views.VerifyEmailView.as_view(), name='auth-verify-email'),
@@ -13,6 +14,9 @@ auth_urlpatterns = [
     path('change-password/', views.ChangePasswordView.as_view(), name='auth-change-password'),
     path('password-reset/', views.PasswordResetRequestView.as_view(), name='auth-password-reset'),
     path('password-reset/confirm/', views.PasswordResetConfirmView.as_view(), name='auth-password-reset-confirm'),
+    
+    path('2fa/enable/', views.Enable2FAView.as_view(), name='auth-2fa-enable'),
+    path('2fa/confirm/', views.Confirm2FAView.as_view(), name='auth-2fa-confirm'),
 ]
 
 admin_urlpatterns = [

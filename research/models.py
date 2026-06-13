@@ -1,5 +1,7 @@
 from django.db import models
 from accounts.models import User
+from django.db import models
+from .validators import validate_file_size
 
 
 class ResearchPaper(models.Model):
@@ -25,7 +27,7 @@ class ResearchPaper(models.Model):
     abstract = models.TextField()
 
     paper_file = models.FileField(
-        upload_to="research_papers/"
+        upload_to='papers/', validators=[validate_file_size]
     )
 
     publisher = models.ForeignKey(

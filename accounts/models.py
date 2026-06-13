@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.utils import timezone
+import pyotp
 from .managers import CustomUserManager
 
 
@@ -30,6 +31,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(null=True, blank=True)
+    
+    two_factor_secret = models.CharField(max_length=32, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['full_name']
@@ -41,8 +44,18 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name = 'User'
         verbose_name_plural = 'Users'
 
-    def __str__(self):
+    def str(self):
         return f"{self.full_name} <{self.email}>"
+
+    def generate_2fa_secret(self):
+        self.two_factor_secret = pyotp.random_base32()
+        self.save()
+
+    def verify_otp(self, otp_code):
+        if not self.two_factor_secret:
+            return False
+        totp = pyotp.TOTP(self.two_factor_secret)
+        return totp.verify(otp_code)
 
     @property
     def is_admin(self):
@@ -86,5 +99,5 @@ class PasswordResetToken(models.Model):
     def is_valid(self):
         return not self.is_used and self.expires_at > timezone.now()
 
-    def __str__(self):
+    def str(self):
         return f"Token for {self.user.email} [{self.token_type}]"
