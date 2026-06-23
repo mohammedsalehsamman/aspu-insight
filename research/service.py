@@ -1,7 +1,7 @@
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from research.models import ResearchPaper
-from committeeMember.models import CommitteeMember
+from committees.models import Committee
 
 class ResearchPaperService:
 
