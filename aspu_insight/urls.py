@@ -82,6 +82,10 @@ urlpatterns = [
         ),
         name='redoc'
     ),
+    path(
+        'api/v1/committees-app/', include('committees.urls')
+        ),
+    
 ]
 
 if settings.DEBUG:

@@ -1,54 +1,26 @@
 from django.db import models
-from accounts.models import User
-from django.db import models
-from .validators import validate_file_size
-
+from django.conf import settings
 
 class ResearchPaper(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('under_review', 'Under Review'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
 
-    class Status(models.TextChoices):
-        SUBMITTED = "SUBMITTED", "Submitted"
-        ASSISTANT_REVIEW = "ASSISTANT_REVIEW", "Assistant Review"
-        EDITOR_REVIEW = "EDITOR_REVIEW", "Editor Review"
-        COMMITTEE_REVIEW = "COMMITTEE_REVIEW", "Committee Review"
-        REVISION_REQUIRED = "REVISION_REQUIRED", "Revision Required"
-        REJECTED = "REJECTED", "Rejected"
-        ACCEPTED = "ACCEPTED", "Accepted"
-        PUBLISHED = "PUBLISHED", "Published"
-
-    research_id = models.AutoField(
-        primary_key=True
-    )
-
-    title = models.CharField(
-        max_length=300
-    )
-
+    title = models.CharField(max_length=255)
     abstract = models.TextField()
-
-    paper_file = models.FileField(
-        upload_to='papers/', validators=[validate_file_size]
-    )
-
-    publisher = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="research_papers"
-    )
-
-    status = models.CharField(
-        max_length=50,
-        choices=Status.choices,
-        default=Status.SUBMITTED
-    )
-
-    submission_date = models.DateTimeField(
-        auto_now_add=True
-    )
-
-    updated_at = models.DateTimeField(
-        auto_now=True
-    )
+    pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True)
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
+    is_paid_open_access = models.BooleanField(default=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    rejection_reason = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = "ResearchPaper"
+        db_table = 'ResearchPaper'
+
+    def str(self):
+        return self.title

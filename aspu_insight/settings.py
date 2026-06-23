@@ -53,10 +53,9 @@ INSTALLED_APPS = [
     'ai_service',
     'dashboard',
     'notifications',
-    'committeeMember',
     'assistantReview',
     'editorReview',
-    'committeeDecision',
+    'configuration',
     'reviewerinvitation',
     'researchHistory'
     
@@ -112,6 +111,9 @@ AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.EmailBackend',
     'django.contrib.auth.backends.ModelBackend',
+    
+    
+    'axes.backends.AxesStandaloneBackend',
 ]
 
 REST_FRAMEWORK = {
