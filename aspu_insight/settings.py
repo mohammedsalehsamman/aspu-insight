@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'axes' ,
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
@@ -52,10 +53,9 @@ INSTALLED_APPS = [
     'ai_service',
     'dashboard',
     'notifications',
-    'committeeMember',
     'assistantReview',
     'editorReview',
-    'committeeDecision',
+    'configuration',
     'reviewerinvitation',
     'researchHistory'
     
@@ -70,6 +70,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware'
+    
 ]
 
 ROOT_URLCONF = 'aspu_insight.urls'
@@ -109,6 +111,9 @@ AUTH_USER_MODEL = 'accounts.User'
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.EmailBackend',
     'django.contrib.auth.backends.ModelBackend',
+    
+    
+    'axes.backends.AxesStandaloneBackend',
 ]
 
 REST_FRAMEWORK = {
@@ -207,6 +212,9 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
 }
 
+AXES_FAILURE_LIMIT = 4            
+AXES_COOLOFF_TIME = 2                   
+AXES_RESET_ON_SUCCESS = True
 
 HF_HOME = str(BASE_DIR / '.hf_cache')
 os.environ.setdefault('HF_HOME', HF_HOME)

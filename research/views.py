@@ -1,116 +1,95 @@
+from django.http import FileResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny
+from .models import ResearchPaper
+from rest_framework.parsers import MultiPartParser, FormParser
+from .serializers import ResearchPaperDetailSerializer 
+from configuration.models import JournalConfiguration
 
-from research.serializers import ResearchPaperSerializer
-from research.service import ResearchPaperService
-
-
-class ResearchPaperAPIView(APIView):
+class ResearchPaperListCreateAPIView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+   
+    parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-
-        papers = ResearchPaperService.get_visible_papers(
-            request.user
-        )
-
-        serializer = ResearchPaperSerializer(
-            papers,
-            many=True
-        )
-
-        return Response(serializer.data)
+        papers = ResearchPaper.objects.all().select_related('author')
+        serializer = ResearchPaperDetailSerializer(papers, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-
-        serializer = ResearchPaperSerializer(
-            data=request.data
-        )
-
-        serializer.is_valid(
-            raise_exception=True
-        )
-
-        paper = ResearchPaperService.create_paper(
-            request.user,
-            serializer.validated_data
-        )
-
-        return Response(
-            ResearchPaperSerializer(paper).data,
-            status=status.HTTP_201_CREATED
-        )
-
-
+        serializer = ResearchPaperDetailSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save(author=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
 class ResearchPaperDetailAPIView(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
-    def get(self, request, pk):
+    def get_object(self, paper_id):
+        try:
+            return ResearchPaper.objects.select_related('author').get(id=paper_id)
+        except ResearchPaper.DoesNotExist:
+            return None
 
-        paper = ResearchPaperService.get_paper(pk)
+    def get(self, request, paper_id):
+        paper = self.get_object(paper_id)
+        if not paper:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        serializer = ResearchPaperDetailSerializer(paper, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
-        if not ResearchPaperService.can_view(
-            request.user,
-            paper
-        ):
-            return Response(
-                {"detail": "Permission denied"},
-                status=403
-            )
+    def put(self, request, paper_id):
+        paper = self.get_object(paper_id)
+        if not paper:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+            
+        if paper.author != request.user and not request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+            
+        serializer = ResearchPaperDetailSerializer(paper, data=request.data, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = ResearchPaperSerializer(
-            paper
-        )
+    def delete(self, request, paper_id):
+        paper = self.get_object(paper_id)
+        if not paper:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+            
+        if paper.author != request.user and not request.user.is_staff:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+            
+        paper.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
-        return Response(serializer.data)
+class ResearchPaperDownloadAPIView(APIView):
+    permission_classes = [AllowAny]
 
-    def put(self, request, pk):
+    def get(self, request, paper_id):
+        try:
+            paper = ResearchPaper.objects.get(id=paper_id)
+        except ResearchPaper.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
-        paper = ResearchPaperService.get_paper(pk)
+        if not paper.pdf_file:
+            return Response(status=status.HTTP_404_NOT_FOUND)
 
-        if not ResearchPaperService.can_update(
-            request.user,
-            paper
-        ):
-            return Response(
-                {"detail": "Update not allowed"},
-                status=403
-            )
+        user = request.user
 
-        serializer = ResearchPaperSerializer(
-            paper,
-            data=request.data
-        )
+        if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
+            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
 
-        serializer.is_valid(
-            raise_exception=True
-        )
+        config = JournalConfiguration.objects.first()
+        current_mode = config.system_mode if config else 'full_open'
 
-        paper = ResearchPaperService.update_paper(
-            paper,
-            serializer.validated_data
-        )
+        if current_mode == 'full_open':
+            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
 
-        return Response(
-            ResearchPaperSerializer(paper).data
-        )
+        if current_mode == 'hybrid' and paper.is_paid_open_access:
+            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
 
-    def delete(self, request, pk):
-
-        paper = ResearchPaperService.get_paper(pk)
-
-        if not ResearchPaperService.can_delete(
-            request.user,
-            paper
-        ):
-            return Response(
-                {"detail": "Delete not allowed"},
-                status=403
-            )
-
-        ResearchPaperService.delete_paper(
-            paper
-        )
-
-        return Response(
-            status=status.HTTP_204_NO_CONTENT
-        )
+        return Response(status=status.HTTP_403_FORBIDDEN)
