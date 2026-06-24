@@ -221,3 +221,6 @@ pg_hba.conf
 postgresql.conf
 
 media
+
+# Hugging Face model cache (Claim-to-Evidence Graph)
+.hf_cache/

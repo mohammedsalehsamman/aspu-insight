@@ -76,3 +76,82 @@ class IEEECheckReport(models.Model):
     @property
     def references_list(self) -> list:
         return self.full_result.get('references', [])
+
+
+class ClaimEvidenceGraphReport(models.Model):
+
+    class Status(models.TextChoices):
+        PENDING    = 'pending',    'قيد المعالجة'
+        PROCESSING = 'processing', 'جارٍ التحليل'
+        COMPLETED  = 'completed',  'مكتمل'
+        FAILED     = 'failed',     'فشل'
+
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='claim_evidence_reports',
+        verbose_name='طُلب من قِبل',
+    )
+
+    document_file = models.FileField(
+        upload_to='claim_evidence_documents/%Y/%m/',
+        max_length=500,
+        verbose_name='ملف البحث (PDF/DOCX)',
+    )
+    original_filename = models.CharField(max_length=255, blank=True, verbose_name='اسم الملف الأصلي')
+
+    paper_title       = models.CharField(max_length=500, blank=True, verbose_name='عنوان الورقة')
+    detected_language = models.CharField(max_length=10, blank=True, verbose_name='اللغة المكتشفة')
+
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING, verbose_name='الحالة')
+
+    graph_data = models.JSONField(default=dict, blank=True, verbose_name='بيانات الرسم البياني')
+
+    claims_count   = models.PositiveIntegerField(default=0, verbose_name='عدد الادعاءات')
+    evidence_count = models.PositiveIntegerField(default=0, verbose_name='عدد الأدلة')
+    neutral_count  = models.PositiveIntegerField(default=0, verbose_name='عدد الجمل المحايدة')
+    edges_count    = models.PositiveIntegerField(default=0, verbose_name='عدد الروابط')
+
+    similarity_threshold = models.FloatField(default=0.5, verbose_name='عتبة التشابه')
+    top_claims_count     = models.PositiveIntegerField(default=10, verbose_name='عدد أهم الادعاءات')
+
+    source_excerpt = models.TextField(blank=True, verbose_name='مقتطف من النص المصدر')
+    summary        = models.TextField(blank=True, verbose_name='الملخص')
+    error_message  = models.TextField(blank=True, verbose_name='رسالة الخطأ')
+
+    created_at              = models.DateTimeField(auto_now_add=True, verbose_name='تاريخ الإنشاء')
+    processing_time_seconds = models.FloatField(null=True, blank=True, verbose_name='وقت المعالجة (ثانية)')
+
+    class Meta:
+        verbose_name        = 'تقرير رسم الادعاء-الدليل'
+        verbose_name_plural = 'تقارير رسم الادعاء-الدليل'
+        ordering            = ['-created_at']
+
+    def __str__(self) -> str:
+        return f"[{self.status.upper()}] {self.paper_title[:50] or self.original_filename}"
+
+    @property
+    def status_display_ar(self) -> str:
+        return {
+            'pending':    'قيد المعالجة',
+            'processing': 'جارٍ التحليل',
+            'completed':  'مكتمل',
+            'failed':     'فشل',
+        }.get(self.status, self.status)
+
+    @property
+    def nodes(self) -> list:
+        return self.graph_data.get('nodes', [])
+
+    @property
+    def edges(self) -> list:
+        return self.graph_data.get('edges', [])
+
+    @property
+    def focus_graph(self) -> dict:
+        return self.graph_data.get('focus_graph', {'nodes': [], 'edges': []})
+
+    @property
+    def top_claims(self) -> list:
+        return self.graph_data.get('top_claims', [])

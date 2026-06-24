@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import IEEECheckReport
+from .models import IEEECheckReport, ClaimEvidenceGraphReport
 
 
 class IEEECheckReportListSerializer(serializers.ModelSerializer):
@@ -73,3 +73,71 @@ class IEEECheckReportSerializer(serializers.ModelSerializer):
 
     def get_references_list(self, obj) -> list:
         return obj.references_list
+
+
+class ClaimEvidenceGraphReportListSerializer(serializers.ModelSerializer):
+
+    status_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClaimEvidenceGraphReport
+        fields = [
+            'id',
+            'original_filename',
+            'paper_title',
+            'detected_language',
+            'status',
+            'status_display',
+            'claims_count',
+            'evidence_count',
+            'neutral_count',
+            'edges_count',
+            'similarity_threshold',
+            'top_claims_count',
+            'processing_time_seconds',
+            'created_at',
+        ]
+
+    def get_status_display(self, obj) -> str:
+        return obj.status_display_ar
+
+
+class ClaimEvidenceGraphReportSerializer(serializers.ModelSerializer):
+
+    status_display = serializers.SerializerMethodField()
+    focus_graph     = serializers.SerializerMethodField()
+    top_claims      = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClaimEvidenceGraphReport
+        fields = [
+            'id',
+            'original_filename',
+            'paper_title',
+            'detected_language',
+            'status',
+            'status_display',
+            'graph_data',
+            'focus_graph',
+            'top_claims',
+            'claims_count',
+            'evidence_count',
+            'neutral_count',
+            'edges_count',
+            'similarity_threshold',
+            'top_claims_count',
+            'source_excerpt',
+            'summary',
+            'error_message',
+            'processing_time_seconds',
+            'created_at',
+        ]
+
+    def get_status_display(self, obj) -> str:
+        return obj.status_display_ar
+
+    def get_focus_graph(self, obj) -> dict:
+        return obj.focus_graph
+
+    def get_top_claims(self, obj) -> list:
+        return obj.top_claims

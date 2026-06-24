@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import IEEECheckReport
+from .models import IEEECheckReport, ClaimEvidenceGraphReport
 
 
 @admin.register(IEEECheckReport)
@@ -39,4 +39,32 @@ class IEEECheckReportAdmin(admin.ModelAdmin):
     def status_badge(self, obj):
         icons = {'pass': 'مقبول', 'warning': 'يحتاج تحسين', 'fail': 'يحتاج مراجعة', 'error': 'خطأ'}
         return icons.get(obj.status, obj.status)
+    status_badge.short_description = 'الحالة'
+
+
+@admin.register(ClaimEvidenceGraphReport)
+class ClaimEvidenceGraphReportAdmin(admin.ModelAdmin):
+    list_display = [
+        'id', 'paper_title_short', 'detected_language',
+        'claims_count', 'evidence_count', 'edges_count',
+        'status_badge', 'created_at',
+    ]
+    list_filter = ['status', 'detected_language', 'created_at']
+    search_fields = ['paper_title', 'original_filename']
+    readonly_fields = [
+        'paper_title', 'detected_language', 'status',
+        'graph_data', 'claims_count', 'evidence_count',
+        'neutral_count', 'edges_count', 'similarity_threshold',
+        'top_claims_count',
+        'source_excerpt', 'summary', 'error_message',
+        'processing_time_seconds', 'created_at',
+    ]
+    ordering = ['-created_at']
+
+    def paper_title_short(self, obj):
+        return obj.paper_title[:60] or obj.original_filename
+    paper_title_short.short_description = 'الورقة'
+
+    def status_badge(self, obj):
+        return obj.status_display_ar
     status_badge.short_description = 'الحالة'
