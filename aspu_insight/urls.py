@@ -1,9 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
-
 from django.conf import settings
 from django.conf.urls.static import static
-
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -19,25 +17,25 @@ urlpatterns = [
 
     # Django Admin
     path(
-        'admin/',
+        'admin/2004/R',
         admin.site.urls
     ),
 
     # Authentication APIs
     path(
-        'api/auth/',
+        'api/auth/ASPU-2004/',
         include((auth_urlpatterns, 'auth'))
     ),
 
     # Admin APIs
     path(
-        'api/admin/',
+        'api/admin/2004-R/',
         include((admin_urlpatterns, 'admin-api'))
     ),
 
     # AI Service APIs
     path(
-        'api/ai/',
+        'api/ai/ai2004-R/',
         include(
             'ai_service.urls',
             namespace='ai_service'
@@ -46,7 +44,7 @@ urlpatterns = [
 
     # Research APIs
     path(
-        'api/research/',
+        'api/research/researchAspu2004/',
         include('research.urls')
     ),
 
@@ -64,7 +62,7 @@ urlpatterns = [
 
     # Swagger / OpenAPI
     path(
-        'api/schema/',
+        'api/schema/schemaAspu2004/',
         SpectacularAPIView.as_view(),
         name='schema'
     ),
@@ -78,12 +76,16 @@ urlpatterns = [
     ),
 
     path(
-        'api/redoc/',
+        'api/redoc/redocAspu2004/',
         SpectacularRedocView.as_view(
             url_name='schema'
         ),
         name='redoc'
     ),
+    path(
+        'api/v1/committees-app/', include('committees.urls')
+        ),
+    
 ]
 
 if settings.DEBUG:
