@@ -265,9 +265,7 @@ class AdminResendVerificationView(APIView):
         return Response({'message': f'تم إرسال بريد التأكيد إلى {user.email}.'})
 
 
-# ==============================================================================
-# الـ APIs الإضافية لتمكين وإعداد التحقق الثنائي مع الـ Front-end
-# ==============================================================================
+
 
 class Enable2FAView(APIView):
     permission_classes = [IsAuthenticated]

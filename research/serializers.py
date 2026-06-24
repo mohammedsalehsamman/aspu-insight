@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from research.models import ResearchPaper
+from committees.models import Committee, CommitteeMember
 
 class ResearchPaperDetailSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
@@ -25,6 +26,24 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         user = request.user if request else None
 
         if user and user.is_authenticated:
+            committee = Committee.objects.filter(paper=instance).first()
+            is_editor = (getattr(user, 'role', '') == 'editor') or (committee and committee.editor == user)
+
+            if is_editor:
+                if not committee or committee.status == 'pending':
+                    allowed_fields = ['id', 'title', 'abstract']
+                    filtered_rep = {field: representation[field] for field in allowed_fields if field in representation}
+                    filtered_rep['pdf_file'] = None
+                    return filtered_rep
+
+            member = CommitteeMember.objects.filter(committee__paper=instance, user=user).first()
+            if member:
+                if member.committee.status == 'pending' or member.response == 'pending':
+                    allowed_fields = ['id', 'title', 'abstract']
+                    filtered_rep = {field: representation[field] for field in allowed_fields if field in representation}
+                    filtered_rep['pdf_file'] = None
+                    return filtered_rep
+
             if user == instance.author or user.is_staff or getattr(user, 'role', '') == 'editor':
                 return representation
 
