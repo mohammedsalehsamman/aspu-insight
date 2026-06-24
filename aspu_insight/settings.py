@@ -26,9 +26,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'SECRET_KEY'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 
 # Application definition
@@ -147,7 +147,6 @@ if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 else:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = True
@@ -207,5 +206,23 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
+
+
+HF_HOME = str(BASE_DIR / '.hf_cache')
+os.environ.setdefault('HF_HOME', HF_HOME)
+
+CLAIM_EVIDENCE_EMBEDDING_MODEL = config('CLAIM_EVIDENCE_EMBEDDING_MODEL', default='sentence-transformers/all-MiniLM-L6-v2')
+CLAIM_EVIDENCE_ZERO_SHOT_MODEL = config('CLAIM_EVIDENCE_ZERO_SHOT_MODEL', default='valhalla/distilbart-mnli-12-3')
+CLAIM_EVIDENCE_SIMILARITY_THRESHOLD = config('CLAIM_EVIDENCE_SIMILARITY_THRESHOLD', default=0.5, cast=float)
+CLAIM_EVIDENCE_TOP_CLAIMS_COUNT = config('CLAIM_EVIDENCE_TOP_CLAIMS_COUNT', default=10, cast=int)
+
+
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
 
 
