@@ -3,18 +3,18 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny
-from .models import ResearchPaper
 from rest_framework.parsers import MultiPartParser, FormParser
+from .models import ResearchPaper
 from .serializers import ResearchPaperDetailSerializer 
 from configuration.models import JournalConfiguration
+from .service import ResearchPaperService
 
 class ResearchPaperListCreateAPIView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
-   
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
-        papers = ResearchPaper.objects.all().select_related('author')
+        papers = ResearchPaperService.get_visible_papers(request.user)
         serializer = ResearchPaperDetailSerializer(papers, many=True, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -38,6 +38,10 @@ class ResearchPaperDetailAPIView(APIView):
         paper = self.get_object(paper_id)
         if not paper:
             return Response(status=status.HTTP_404_NOT_FOUND)
+        
+        if not ResearchPaperService.can_view(request.user, paper):
+            return Response({"detail": "Not authorized to view this paper."}, status=status.HTTP_403_FORBIDDEN)
+
         serializer = ResearchPaperDetailSerializer(paper, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -88,8 +92,8 @@ class ResearchPaperDownloadAPIView(APIView):
 
         if current_mode == 'full_open':
             return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
-
         if current_mode == 'hybrid' and paper.is_paid_open_access:
             return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
 
         return Response(status=status.HTTP_403_FORBIDDEN)
+        
