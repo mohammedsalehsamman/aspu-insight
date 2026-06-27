@@ -14,7 +14,8 @@ import time
 from celery import shared_task
 
 from .claim_evidence.services.graph_builder import extract_graph
-from .ieee import detect_language, extract_paper_title, extract_text_from_file
+from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
+from .ieee_checker.infrastructure.file_parser import extract_text_from_file
 from .models import ClaimEvidenceGraphReport
 
 logger = logging.getLogger(__name__)

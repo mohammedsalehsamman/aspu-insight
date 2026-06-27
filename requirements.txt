@@ -37,3 +37,6 @@ transformers==4.46.3
 sentence-transformers==3.3.1
 networkx==3.4.2
 nltk==3.9.1
+pyotp>=2.9.0
+django-axes>=6.0.0
+qrcode>=7.4.0

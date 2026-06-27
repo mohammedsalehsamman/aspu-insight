@@ -17,7 +17,7 @@ urlpatterns = [
 
     # Django Admin
     path(
-        'admin/2004/R',
+        'admin/2004/R/',
         admin.site.urls
     ),
 
