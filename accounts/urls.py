@@ -17,6 +17,7 @@ auth_urlpatterns = [
     
     path('2fa/enable/', views.Enable2FAView.as_view(), name='auth-2fa-enable'),
     path('2fa/confirm/', views.Confirm2FAView.as_view(), name='auth-2fa-confirm'),
+    path('2fa/verify/', views.Verify2FAView.as_view(), name='auth-2fa-verify'),
 ]
 
 admin_urlpatterns = [
