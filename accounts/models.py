@@ -55,7 +55,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         if not self.two_factor_secret:
             return False
         totp = pyotp.TOTP(self.two_factor_secret)
-        return totp.verify(otp_code)
+        return totp.verify(otp_code, valid_window=2)
 
     @property
     def is_admin(self):
