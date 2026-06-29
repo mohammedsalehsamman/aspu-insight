@@ -1,7 +1,6 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User, PasswordResetToken
 
@@ -81,12 +80,8 @@ class LoginSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError('هذا الحساب معطل. تواصل مع الإدارة.')
 
-        refresh = RefreshToken.for_user(user)
-
         return {
             'user': user,
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
         }
 
 

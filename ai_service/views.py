@@ -11,7 +11,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .ieee import perform_ieee_analysis
+from .ieee_checker.services.analyzer import perform_ieee_analysis
 from .models import IEEECheckReport, ClaimEvidenceGraphReport
 from .serializers import (
     IEEECheckReportSerializer,
