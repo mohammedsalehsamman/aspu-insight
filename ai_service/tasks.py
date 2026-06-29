@@ -1,45 +1,25 @@
-"""
-Celery tasks for ai_service.
-
-Currently runs in `CELERY_TASK_ALWAYS_EAGER` mode (synchronous, in-process)
-- see `aspu_insight/celery.py` and `aspu_insight/settings.py`. The task is
-written as a normal `@shared_task` so that switching to a real broker
-later (Redis + a running worker) requires no code changes here.
-"""
 from __future__ import annotations
-
 import logging
 import time
-
 from celery import shared_task
+from pypdf import PdfReader
+from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
+from .services.analyzer import PlagiarismAnalyzer
 
-from .claim_evidence.services.graph_builder import extract_graph
-from .ieee import detect_language, extract_paper_title, extract_text_from_file
-from .models import ClaimEvidenceGraphReport
-
-logger = logging.getLogger(__name__)
-
+def extract_text_from_pdf(pdf_path: str) -> str:
+    raw_text = ""
+    try:
+        reader = PdfReader(pdf_path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                raw_text += page_text + " "
+    except Exception as e:
+        logger.error("Error extracting text from PDF %s: %s", pdf_path, e)
+    return raw_text
 
 @shared_task(bind=True)
 def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
-    """Run the Claim-to-Evidence Graph analysis for a `ClaimEvidenceGraphReport`.
-
-    Loads the report's uploaded document, extracts its text, runs
-    `extract_graph()`, and updates the report's status/graph_data/summary
-    fields in place. Any failure (unreadable file, malformed/unintelligible
-    text, model error, ...) is caught and recorded on the report as
-    `status=FAILED` + `error_message`, so a single bad document cannot crash
-    the worker.
-
-    In `CELERY_TASK_ALWAYS_EAGER` mode this executes synchronously when
-    `.delay()` is called from the view.
-
-    Args:
-        report_id: Primary key of the `ClaimEvidenceGraphReport` to process.
-
-    Returns:
-        A small dict summary `{"status": str, "report_id": int, ...}`.
-    """
     try:
         report = ClaimEvidenceGraphReport.objects.get(pk=report_id)
     except ClaimEvidenceGraphReport.DoesNotExist:
@@ -108,3 +88,45 @@ def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
         report.processing_time_seconds = round(time.time() - start_time, 2)
         report.save(update_fields=["status", "error_message", "processing_time_seconds"])
         return {"status": "failed", "report_id": report_id, "error": str(e)}
+@shared_task(bind=True)
+def check_paper_plagiarism_task(self, paper_id: int) -> dict:
+    try:
+        paper = ResearchPaper.objects.get(id=paper_id)
+        paper.status = 'checking_plagiarism'
+        paper.save(update_fields=["status"])
+
+        raw_text = ""
+        if paper.pdf_file:
+            raw_text = extract_text_from_pdf(paper.pdf_file.path)
+
+        if not raw_text.strip():
+            raw_text = paper.abstract
+
+        analyzer = PlagiarismAnalyzer(api_key="YOUR_ACTUAL_API_KEY", chunk_size=30)
+        report_data = analyzer.calculate_similarity(raw_text)
+
+        report = PlagiarismReport.objects.create(
+            paper=paper,
+            total_similarity_score=report_data['total_score'],
+            ai_keywords=report_data.get('ai_tags', [])
+        )
+
+        for src in report_data['sources']:
+            PlagiarismSource.objects.create(
+                report=report,
+                source_url=src['url'],
+                source_title=src['title'],
+                match_percentage=src['match_percentage'],
+                matched_text_snippet=src['snippet']
+            )
+
+        paper.status = 'under_review'
+        paper.save(update_fields=["status"])
+        return {"status": paper.status, "paper_id": paper_id}
+
+    except Exception as e:
+        logger.exception("Plagiarism check failed for paper %s: %s", paper_id, e)
+        if paper:
+            paper.status = 'plagiarism_failed'
+            paper.save(update_fields=["status"])
+        return {"status": "failed", "paper_id": paper_id, "error": str(e)}    
