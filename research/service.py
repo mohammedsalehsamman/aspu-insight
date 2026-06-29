@@ -2,15 +2,18 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from research.models import ResearchPaper
 from committees.models import Committee, CommitteeMember
+from ai_service.tasks import check_paper_plagiarism_task
 
 class ResearchPaperService:
 
     @staticmethod
     def create_paper(user, validated_data):
-        return ResearchPaper.objects.create(
+        paper = ResearchPaper.objects.create(
             author=user,
             **validated_data
         )
+        check_paper_plagiarism_task.delay(paper.id)
+        return paper
 
     @staticmethod
     def get_paper(pk):
@@ -24,6 +27,9 @@ class ResearchPaperService:
         if not user or not user.is_authenticated:
             return ResearchPaper.objects.filter(status='approved')
 
+        if getattr(user, 'is_assistant_editor', False):
+            return ResearchPaper.objects.select_related('author').all()
+
         assigned_paper_ids = CommitteeMember.objects.filter(
             user=user
         ).values_list('committee__paper_id', flat=True)
@@ -32,8 +38,12 @@ class ResearchPaperService:
             Q(status='approved') |
             Q(author=user) |
             Q(id__in=assigned_paper_ids) |
-            Q(committee__editor=user)
+            Q(committee__editor=user, is_reviewed_by_assistant=True)
         ).select_related('author').distinct()
+
+    @staticmethod
+    def get_author_dashboard_papers(user):
+        return ResearchPaper.objects.filter(author=user).select_related('author')
 
     @staticmethod
     def can_view(user, paper):
@@ -43,16 +53,19 @@ class ResearchPaperService:
         if not user or not user.is_authenticated:
             return False
 
+        if getattr(user, 'is_assistant_editor', False):
+            return True
+
         if paper.author == user or user.is_staff: 
             return True
 
         if Committee.objects.filter(paper=paper, editor=user).exists():
-            return True
+            return paper.is_reviewed_by_assistant
 
         return CommitteeMember.objects.filter(
             committee__paper=paper,
             user=user
-        ).exists()
+        ).exists() and paper.is_reviewed_by_assistant
 
     @staticmethod
     def can_update(user, paper):
@@ -80,3 +93,10 @@ class ResearchPaperService:
     @staticmethod
     def delete_paper(paper):
         paper.delete()
+
+    @staticmethod
+    def submit_assistant_report(paper, report_text):
+        paper.assistant_editor_report = report_text
+        paper.is_reviewed_by_assistant = True
+        paper.save()
+        return paper
