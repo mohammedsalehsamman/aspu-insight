@@ -1,5 +1,7 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
+from datetime import timedelta
 
 class Committee(models.Model):
     BLINDING_CHOICES = [
@@ -10,17 +12,29 @@ class Committee(models.Model):
     STATUS_CHOICES = [
         ('pending', 'قيد التشكيل'),
         ('approved', 'تمت الموافقة على اللجنة'),
+        ('accepted', 'تمت الموافقة على الورقة'),
         ('rejected', 'مرفوضة'),
         ('revision', 'مطلوب تعديلات'),
+        ('expired', 'منتهية الصلاحية'),
     ]
+
+    FINAL_STATUSES = {'accepted', 'rejected', 'revision', 'expired'}
+
     paper = models.OneToOneField('research.ResearchPaper', on_delete=models.CASCADE, related_name='committee')
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='created_committees')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     blinding_type = models.CharField(max_length=20, choices=BLINDING_CHOICES, default='single_blind')
     created_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'Committee'
+
+    def save(self, *args, **kwargs):
+        if not self.pk and not self.deadline:
+            days = getattr(settings, 'COMMITTEE_DEADLINE_DAYS', 15)
+            self.deadline = timezone.now() + timedelta(days=days)
+        super().save(*args, **kwargs)
 
 class CommitteeMember(models.Model):
     ROLE_CHOICES = [
