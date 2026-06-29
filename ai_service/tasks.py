@@ -102,15 +102,18 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         if not raw_text.strip():
             raw_text = paper.abstract
 
+        # استدعاء المحلل الذكي ومعالجة القطع المتتالية
         analyzer = PlagiarismAnalyzer(api_key="YOUR_ACTUAL_API_KEY", chunk_size=30)
         report_data = analyzer.calculate_similarity(raw_text)
 
+        # حفظ التقرير الرئيسي وحفظ الكلمات المفتاحية الذكية
         report = PlagiarismReport.objects.create(
             paper=paper,
             total_similarity_score=report_data['total_score'],
             ai_keywords=report_data.get('ai_tags', [])
         )
 
+        # حفظ المصادر المقتبسة من الويب بدقة
         for src in report_data['sources']:
             PlagiarismSource.objects.create(
                 report=report,
@@ -129,4 +132,4 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         if paper:
             paper.status = 'plagiarism_failed'
             paper.save(update_fields=["status"])
-        return {"status": "failed", "paper_id": paper_id, "error": str(e)}    
+        return {"status": "failed", "paper_id": paper_id, "error": str(e)}
