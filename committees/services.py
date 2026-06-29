@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from committees.models import Committee, CommitteeMember
+from committees.utils import send_committee_expiry_email, send_substitute_invitation_email
 from research.models import ResearchPaper
 
 User = get_user_model()
@@ -20,8 +21,12 @@ class CommitteeService:
         except ResearchPaper.DoesNotExist:
             raise NotFound("البحث غير موجود.")
 
-        if Committee.objects.filter(paper=paper).exists():
-            raise ValidationError("اللجنة موجودة مسبقاً.")
+        existing = Committee.objects.filter(paper=paper).first()
+        if existing:
+            if existing.status == 'expired':
+                existing.delete()
+            else:
+                raise ValidationError("اللجنة موجودة مسبقاً.")
 
         if len(primary_ids) != 3:
             raise ValidationError("يجب 3 محكمين أساسيين.")
@@ -29,13 +34,11 @@ class CommitteeService:
         primary_ids = list(map(int, primary_ids))
         substitute_ids = list(map(int, substitute_ids))
 
-        # ❌ منع التكرار
         if len(set(primary_ids)) != 3 or len(set(substitute_ids)) != len(substitute_ids):
             raise ValidationError("تكرار محكمين غير مسموح.")
 
         all_ids = list(set(primary_ids + substitute_ids))
 
-        # ✅ FIX مهم جداً: user_id بدل id
         users = User.objects.filter(user_id__in=all_ids)
 
         if users.count() != len(all_ids):
@@ -48,7 +51,7 @@ class CommitteeService:
         with transaction.atomic():
             committee = Committee.objects.create(
                 paper=paper,
-                editor_id=user.user_id,   # ✅ FIX
+                editor_id=user.user_id,
                 blinding_type=blinding_type,
                 status='pending'
             )
@@ -57,7 +60,7 @@ class CommitteeService:
                 *[
                     CommitteeMember(
                         committee=committee,
-                        user_id=u_id,  # لازم يكون user_id الحقيقي
+                        user_id=u_id,
                         role='primary',
                         is_substitute=False,
                         is_approved=None
@@ -94,31 +97,63 @@ class CommitteeService:
         except CommitteeMember.DoesNotExist:
             raise NotFound()
 
-        if member.is_approved is not None:
-            raise ValidationError("تم الرد مسبقاً.")
-
         with transaction.atomic():
 
             committee = Committee.objects.select_for_update().get(
                 id=member.committee_id
             )
 
+            if committee.status in Committee.FINAL_STATUSES:
+                raise ValidationError("القرار النهائي صدر، لا يمكن تغيير الرد.")
+
+            if member.is_approved == is_approved:
+                raise ValidationError("الرد نفسه مسجَّل مسبقاً.")
+
+            previously_accepted = member.is_approved is True
+
             member.is_approved = is_approved
-            member.save()
 
-            approved_count = CommitteeMember.objects.filter(
-                committee=committee,
-                is_substitute=False,
-                is_approved=True
-            ).count()
+            if is_approved is False:
+                member.response = 'declined'
 
-            if approved_count == 3:
-                committee.status = 'approved'
-                committee.save()
+                if previously_accepted:
+                    # إلغاء الصوت السابق إن وجد
+                    member.paper_decision = 'pending'
+                    # إعادة اللجنة لحالة pending إذا كانت approved
+                    if committee.status == 'approved':
+                        committee.status = 'pending'
+                        committee.save()
+                    # إرسال طلب للعضو الاحتياطي الأول المتاح
+                    substitute = CommitteeMember.objects.filter(
+                        committee=committee,
+                        is_substitute=True,
+                        is_approved=None
+                    ).first()
+                    if substitute:
+                        send_substitute_invitation_email(substitute)
 
-            elif is_approved is False:
-                committee.status = 'rejected'
-                committee.save()
+                member.save()
+
+            elif is_approved is True:
+                member.response = 'accepted'
+
+                # إذا كان احتياطياً وقبِل → ترقيته لعضو أساسي
+                if member.is_substitute:
+                    member.is_substitute = False
+                    member.role = 'primary'
+
+                member.save()
+
+                # إعادة حساب عدد الموافقين الأساسيين
+                approved_count = CommitteeMember.objects.filter(
+                    committee=committee,
+                    is_substitute=False,
+                    is_approved=True
+                ).count()
+
+                if approved_count == 3:
+                    committee.status = 'approved'
+                    committee.save()
 
         return member
 
@@ -162,13 +197,11 @@ class CommitteeService:
                 paper_decision__in=VALID
             )
 
-            # ❗ مهم: لا تنفذ القرار قبل اكتمال التصويت
             if voted.count() != total:
                 return
 
             accept = voted.filter(paper_decision='accept_paper').count()
             reject = voted.filter(paper_decision='reject_paper').count()
-            modify = voted.filter(paper_decision='modify_paper').count()
 
             committee = member.committee
 
@@ -181,13 +214,57 @@ class CommitteeService:
 
             committee.save()
 
-   
+    # =====================================================
+
+    @staticmethod
+    def _try_force_decision(committee):
+        members = CommitteeMember.objects.filter(
+            committee=committee,
+            is_substitute=False
+        )
+        voted = members.exclude(paper_decision='pending')
+
+        accept = voted.filter(paper_decision='accept_paper').count()
+        reject = voted.filter(paper_decision='reject_paper').count()
+        modify = voted.filter(paper_decision='modify_paper').count()
+
+        if accept >= 2:
+            committee.status = 'accepted'
+        elif reject >= 2:
+            committee.status = 'rejected'
+        elif modify >= 2:
+            committee.status = 'revision'
+        else:
+            return False
+
+        committee.save()
+        return True
+
+    @staticmethod
+    def expire_overdue_committees():
+        from django.utils import timezone
+        overdue = Committee.objects.filter(
+            deadline__lt=timezone.now(),
+            status__in=['pending', 'approved']
+        ).select_related('editor', 'paper')
+
+        for committee in overdue:
+            with transaction.atomic():
+                committee = Committee.objects.select_for_update().get(pk=committee.pk)
+                if committee.status not in ('pending', 'approved'):
+                    continue
+                if not CommitteeService._try_force_decision(committee):
+                    committee.status = 'expired'
+                    committee.save()
+                    send_committee_expiry_email(committee)
+
+    # =====================================================
 
     @staticmethod
     def get_research_paper_details(user, paper_id):
         from research.models import ResearchPaper
         from rest_framework.exceptions import NotFound
-        
+
         try:
             paper = ResearchPaper.objects.select_related('author').get(id=paper_id)
         except ResearchPaper.DoesNotExist:

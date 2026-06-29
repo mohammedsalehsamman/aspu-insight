@@ -5,6 +5,12 @@ from celery import shared_task
 from pypdf import PdfReader
 from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
 from .services.analyzer import PlagiarismAnalyzer
+from .claim_evidence.services.graph_builder import extract_graph
+from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
+from .ieee_checker.infrastructure.file_parser import extract_text_from_file
+from .models import ClaimEvidenceGraphReport
+
+logger = logging.getLogger(name)
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     raw_text = ""
@@ -17,6 +23,27 @@ def extract_text_from_pdf(pdf_path: str) -> str:
     except Exception as e:
         logger.error("Error extracting text from PDF %s: %s", pdf_path, e)
     return raw_text
+<<<<<<< HEAD
+def extract_text_from_pdf(pdf_path: str) -> str:
+    raw_text = ""
+    try:
+        reader = PdfReader(pdf_path)
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                raw_text += page_text + " "
+    except Exception as e:
+        logger.error("Error extracting text from PDF %s: %s", pdf_path, e)
+    return raw_text
+=======
+from .claim_evidence.services.graph_builder import extract_graph
+from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
+from .ieee_checker.infrastructure.file_parser import extract_text_from_file
+from .models import ClaimEvidenceGraphReport
+
+logger = logging.getLogger(__name__)
+
+>>>>>>> 3106ed94207095824034bd4adf775b32acb37969
 
 @shared_task(bind=True)
 def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:

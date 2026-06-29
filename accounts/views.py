@@ -5,8 +5,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, Token
 from rest_framework_simplejwt.exceptions import TokenError
+from datetime import timedelta
+
+
+class PreAuthToken(Token):
+    token_type = 'pre_auth'
+    lifetime = timedelta(minutes=5)
 from django_filters.rest_framework import DjangoFilterBackend
 import pyotp  # مكتبة توليد وفحص رموز المصادقة الثنائية
 
@@ -33,7 +39,7 @@ class RegisterView(APIView):
                 send_email_verification(user, raw_token)
             except Exception as e:
                 import logging
-                logger = logging.getLogger(name)
+                logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to send verification email to {user.email}: {e}")
 
             return Response({
@@ -78,28 +84,22 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            otp_code = request.data.get('otp_code')  # الرمز المرسل من واجهة الـ Front-end
 
-            # التحقق مما إذا كان المستخدم مفعلاً للمصادقة الثنائية (2FA)
             if user.two_factor_secret:
-                if not otp_code:
-                    return Response({
-                        'requires_2fa': True,
-                        'message': 'هذا الحساب محمي بالمصادقة الثنائية، يرجى إرسال رمز الـ OTP.'
-                    }, status=status.HTTP_200_OK)
-                
-                if not user.verify_otp(otp_code):
-                    return Response(
-                        {'error': 'رمز المصادقة الثنائية غير صحيح أو منتهي الصلاحية.'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                pre_auth_token = PreAuthToken()
+                pre_auth_token['user_id'] = user.user_id
+                return Response({
+                    'requires_2fa': True,
+                    'pre_auth_token': str(pre_auth_token),
+                }, status=status.HTTP_200_OK)
 
+            refresh = RefreshToken.for_user(user)
             user.last_login = timezone.now()
             user.save(update_fields=['last_login'])
             return Response({
                 'requires_2fa': False,
-                'access': serializer.validated_data['access'],
-                'refresh': serializer.validated_data['refresh'],
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
                 'user': UserSerializer(user).data,
             })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -118,6 +118,49 @@ class LogoutView(APIView):
             return Response({'message': 'تم تسجيل الخروج بنجاح.'})
         except TokenError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class Verify2FAView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        pre_auth_token_str = request.data.get('pre_auth_token')
+        otp_code = request.data.get('otp_code')
+
+        if not pre_auth_token_str or not otp_code:
+            return Response(
+                {'error': 'pre_auth_token و otp_code مطلوبان.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            token = PreAuthToken(pre_auth_token_str)
+            user_id = token['user_id']
+        except TokenError:
+            return Response(
+                {'error': 'رمز الجلسة المؤقتة غير صالح أو منتهي الصلاحية. يرجى تسجيل الدخول مجدداً.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(user_id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'المستخدم غير موجود.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not user.verify_otp(str(otp_code).strip()):
+            return Response(
+                {'error': 'رمز المصادقة الثنائية غير صحيح أو منتهي الصلاحية.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        refresh = RefreshToken.for_user(user)
+        user.last_login = timezone.now()
+        user.save(update_fields=['last_login'])
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'user': UserSerializer(user).data,
+        })
 
 
 class ProfileView(APIView):
