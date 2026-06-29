@@ -39,7 +39,7 @@ class RegisterView(APIView):
                 send_email_verification(user, raw_token)
             except Exception as e:
                 import logging
-                logger = logging.getLogger(name)
+                logger = logging.getLogger(__name__)
                 logger.warning(f"Failed to send verification email to {user.email}: {e}")
 
             return Response({

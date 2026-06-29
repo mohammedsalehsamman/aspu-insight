@@ -233,4 +233,14 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {
+    'check-committee-deadlines-daily': {
+        'task': 'committees.tasks.check_committee_deadlines',
+        'schedule': crontab(hour=0, minute=0),
+    },
+}
+
+COMMITTEE_DEADLINE_DAYS = 15
+
 
