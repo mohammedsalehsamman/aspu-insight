@@ -27,7 +27,7 @@ class ResearchPaperService:
         if not user or not user.is_authenticated:
             return ResearchPaper.objects.filter(status='approved')
 
-        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
 
         if is_assistant:
             return ResearchPaper.objects.select_related('author').all()
@@ -62,7 +62,7 @@ class ResearchPaperService:
         if not user or not user.is_authenticated:
             return False
 
-        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
 
         if is_assistant:
             return True

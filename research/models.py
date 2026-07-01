@@ -2,20 +2,24 @@ from django.db import models
 from django.conf import settings
 
 class ResearchPaper(models.Model):
-    STATUS_CHOICES = [
-        ('pending', 'Pending Review'),
-        ('checking_plagiarism', 'Checking Plagiarism'),
-        ('under_review', 'Under Review'),
-        ('approved', 'Approved'),
-        ('rejected', 'Rejected'),
-        ('plagiarism_failed', 'Plagiarism Failed')
-    ]
+    class Status(models.TextChoices):
+        PENDING             = 'pending',             'Pending'
+        SUBMITTED           = 'submitted',           'Submitted'
+        CHECKING_PLAGIARISM = 'checking_plagiarism', 'Checking Plagiarism'
+        EDITOR_REVIEW       = 'editor_review',       'Editor Review'
+        REVISION_REQUIRED   = 'revision_required',   'Revision Required'
+        COMMITTEE_REVIEW    = 'committee_review',    'Committee Review'
+        ACCEPTED            = 'accepted',            'Accepted'
+        PUBLISHED           = 'published',           'Published'
+        REJECTED            = 'rejected',            'Rejected'
+        PLAGIARISM_FAILED   = 'plagiarism_failed',   'Plagiarism Failed'
+
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
     is_paid_open_access = models.BooleanField(default=False)
-    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)
     rejection_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
