@@ -30,7 +30,7 @@ class IsAssistantEditor(BasePermission):
         return bool(
             request.user and
             request.user.is_authenticated and
-            request.user.role in ['reviewer_assistant', 'admin']
+            request.user.role in ['assistant_editor', 'admin']
         )
 
 
@@ -41,7 +41,7 @@ class IsReviewer(BasePermission):
         return bool(
             request.user and
             request.user.is_authenticated and
-            request.user.role in ['reviewer', 'reviewer_assistant', 'admin']
+            request.user.role in ['reviewer', 'assistant_editor', 'admin']
         )
 
 

@@ -25,7 +25,7 @@ class AssistantReview(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         limit_choices_to={
-            "role": "reviewer_assistant"
+            "role": "assistant_editor"
         }
     )
 
