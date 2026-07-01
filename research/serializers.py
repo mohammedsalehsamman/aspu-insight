@@ -30,6 +30,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             'plagiarism_report_id', 'ai_keywords', 'assistant_editor_report',
             'is_reviewed_by_assistant', 'review_blindness_type'
         ]
+        read_only_fields = ['review_blindness_type']
 
     def get_author_name(self, obj):
         request = self.context.get('request')
@@ -37,7 +38,8 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
 
         if user and user.is_authenticated:
             blindness = obj.review_blindness_type
-            is_assistant = getattr(user, 'is_assistant_editor', False)
+            
+            is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
             is_editor = (getattr(user, 'role', '') == 'editor') or Committee.objects.filter(paper=obj, editor=user).exists()
             is_reviewer = CommitteeMember.objects.filter(committee__paper=obj, user=user).exists()
 
@@ -45,6 +47,8 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
                 return obj.author.get_full_name() if hasattr(obj.author, 'get_full_name') else str(obj.author)
 
             if blindness == 'double_blind':
+                if is_assistant or is_editor:
+                    return obj.author.get_full_name() if hasattr(obj.author, 'get_full_name') else str(obj.author)
                 return "Anonymous Author (Hidden for Double Blind Review)"
 
             if blindness == 'single_blind':
@@ -82,44 +86,52 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         user = request.user if request else None
 
         if user and user.is_authenticated:
-            if user == instance.author:
+            # 1. الآدمن والباحث يمرون مباشرة بكامل البيانات
+            if user == instance.author or user.is_staff:
                 return representation
-
-            is_assistant = getattr(user, 'is_assistant_editor', False)
-            committee = Committee.objects.filter(paper=instance).first()
+            is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+            
+            # استغلال علاقة الـ OneToOneField بشكل آمن للوصول لبيانات اللجنة
+            committee = instance.committee if hasattr(instance, 'committee') else None
             is_editor = (getattr(user, 'role', '') == 'editor') or (committee and committee.editor == user)
 
+            # 2. المساعد يرى كل شيء للقيام بعمله
             if is_assistant:
                 return representation
+                
+            # 3. صمام الأمان: إذا لم يرسل المساعد تقريره بعد، يُحجب البحث تماماً عن المحرر واللجنة
+            if not instance.is_reviewed_by_assistant:
+                return {}
+
+            # 4. منطق المحرر (Editor):
             if is_editor:
-                if not instance.is_reviewed_by_assistant:
-                    return {}
-                if not instance.is_committee_assigned:
-                    allowed_fields = ['id', 'title', 'abstract', 'assistant_editor_report', 'plagiarism_score', 'plagiarism_report_id', 'ai_keywords']
+                # إذا لم تشكل لجنة بعد أو حالة اللجنة قيد التشكيل (pending) -> حجب الحقول الحساسة والـ PDF
+                if not committee or committee.status == 'pending':
+                    allowed_fields = ['id', 'title', 'abstract', 'assistant_editor_report']
                     filtered_rep = {field: representation.get(field) for field in allowed_fields}
                     filtered_rep['pdf_file'] = None
                     filtered_rep['author_name'] = representation.get('author_name')
+                    filtered_rep['plagiarism_score'] = None
+                    filtered_rep['plagiarism_report_id'] = None
+                    filtered_rep['ai_keywords'] = []
                     return filtered_rep
                 return representation
 
+            # 5. منطق المحكمين (Reviewers):
             member = CommitteeMember.objects.filter(committee__paper=instance, user=user).first()
             if member:
-                if not instance.is_reviewed_by_assistant:
-                    return {}
+                # إذا كانت اللجنة قيد التشكيل أو المحكم لم يوافق بعد على طلب الانضمام (pending) -> حجب الـ PDF
                 if member.committee.status == 'pending' or member.response == 'pending':
-                    allowed_fields = ['id', 'title', 'abstract']
-                    filtered_rep = {field: representation[field] for field in allowed_fields if field in representation}
+                    allowed_fields = ['id', 'title', 'abstract', 'assistant_editor_report']
+                    filtered_rep = {field: representation.get(field) for field in allowed_fields if field in representation}
                     filtered_rep['pdf_file'] = None
                     filtered_rep['plagiarism_score'] = None
                     filtered_rep['plagiarism_report_id'] = None
                     filtered_rep['ai_keywords'] = []
-                    filtered_rep['assistant_editor_report'] = None
                     return filtered_rep
                 return representation
 
-            if user.is_staff:
-                return representation
-
+        # 6. للزوار غير المسجلين أو الحالات العامة الأخرى
         from configuration.security import can_user_access_pdf
         if not can_user_access_pdf(user, instance):
             representation['pdf_file'] = None
@@ -130,5 +142,3 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         return representation
 
 ResearchPaperSerializer = ResearchPaperDetailSerializer
-        
-        
