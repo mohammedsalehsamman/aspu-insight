@@ -18,11 +18,10 @@ FINAL_DECISIONS = {
 }
 
 STATUS_BY_DECISION = {
-EditorReview.Decision.SEND_TO_COMMITTEE: 'committee_review',
-EditorReview.Decision.SEND_TO_COMMITTEE: 'committee_review',
-EditorReview.Decision.REVISION_REQUIRED: 'revision',
-EditorReview.Decision.REJECT: 'rejected',
-EditorReview.Decision.ACCEPT: 'accepted',
+    EditorReview.Decision.SEND_TO_COMMITTEE: ResearchPaper.Status.COMMITTEE_REVIEW,
+    EditorReview.Decision.REVISION_REQUIRED: ResearchPaper.Status.REVISION_REQUIRED,
+    EditorReview.Decision.REJECT:            ResearchPaper.Status.REJECTED,
+    EditorReview.Decision.ACCEPT:            ResearchPaper.Status.ACCEPTED,
 }
 
 

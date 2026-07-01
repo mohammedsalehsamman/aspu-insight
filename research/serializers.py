@@ -39,7 +39,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             blindness = obj.review_blindness_type
             
-            is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+            is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
             is_editor = (getattr(user, 'role', '') == 'editor') or Committee.objects.filter(paper=obj, editor=user).exists()
             is_reviewer = CommitteeMember.objects.filter(committee__paper=obj, user=user).exists()
 
@@ -89,7 +89,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             # 1. الآدمن والباحث يمرون مباشرة بكامل البيانات
             if user == instance.author or user.is_staff:
                 return representation
-            is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+            is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
             
             # استغلال علاقة الـ OneToOneField بشكل آمن للوصول لبيانات اللجنة
             committee = instance.committee if hasattr(instance, 'committee') else None
