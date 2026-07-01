@@ -31,7 +31,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(null=True, blank=True)
-    specialization=models.DateTimeField(max_length=32,null=True,blank=False)
+    specialization=models.CharField(max_length=32,null=True,blank=False)
     
     two_factor_secret = models.CharField(max_length=32, blank=True,null=True)
 
