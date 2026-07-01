@@ -9,7 +9,7 @@ ROLE_CHOICES = [
     ('admin', 'مدير النظام'),
     ('editor', 'محرر'),
     ('reviewer', 'محكم'),
-    ('reviewer_assistant', 'مساعد محكم'),
+    ('assistant_editor', 'مساعد المحرر'),
     ('author', 'باحث'),
     ('reader', 'قارئ'),
 ]
@@ -68,7 +68,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_reviewer(self):
-        return self.role in ['reviewer', 'reviewer_assistant']
+        return self.role in ['reviewer', 'assistant_editor']
 
     @property
     def is_author(self):

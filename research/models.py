@@ -4,29 +4,23 @@ from rest_framework.exceptions import ValidationError
 
 class ResearchPaper(models.Model):
     class Status(models.TextChoices):
-        PENDING = 'pending', 'Pending Review'
+        PENDING             = 'pending',             'Pending'
+        SUBMITTED           = 'submitted',           'Submitted'
         CHECKING_PLAGIARISM = 'checking_plagiarism', 'Checking Plagiarism'
-        UNDER_REVIEW = 'under_review', 'Under Review'
-        APPROVED = 'approved', 'Approved'
-        REJECTED = 'rejected', 'Rejected'
-        PLAGIARISM_FAILED = 'plagiarism_failed', 'Plagiarism Failed'
-        EDITOR_REVIEW = 'editor_review', 'Editor Review'
-        COMMITTEE_REVIEW = 'committee_review', 'Committee Review'
-        ACCEPTED = 'accepted', 'Accepted'
-        PUBLISHED = 'published', 'Published'
+        EDITOR_REVIEW       = 'editor_review',       'Editor Review'
+        REVISION_REQUIRED   = 'revision_required',   'Revision Required'
+        COMMITTEE_REVIEW    = 'committee_review',    'Committee Review'
+        ACCEPTED            = 'accepted',            'Accepted'
+        PUBLISHED           = 'published',           'Published'
+        REJECTED            = 'rejected',            'Rejected'
+        PLAGIARISM_FAILED   = 'plagiarism_failed',   'Plagiarism Failed'
 
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True)
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
     is_paid_open_access = models.BooleanField(default=False)
-    
-    status = models.CharField(
-        max_length=25, 
-        choices=Status.choices, 
-        default=Status.PENDING
-    )
-    
+    status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)
     rejection_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -104,7 +104,7 @@ class SubmitAssistantEditorReportAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, paper_id):
-        is_assistant = getattr(request.user, 'is_assistant_editor', False) or getattr(request.user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+        is_assistant = getattr(request.user, 'is_assistant_editor', False) or getattr(request.user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
         
         if not is_assistant:
             return Response({"detail": "Only assistant editors can perform this action."}, status=status.HTTP_403_FORBIDDEN)
@@ -135,7 +135,7 @@ class ResearchPaperPlagiarismReportView(APIView):
         is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in [
             'assistant_editor', 
             'assistant', 
-            'reviewer_assistant'
+            'assistant_editor'
         ]
 
         # 4. تطبيق منطق الحماية المنظم (إذا لم يكن المساعد، والباحث ليس هو الصاحب، نطبق السيرفس)
