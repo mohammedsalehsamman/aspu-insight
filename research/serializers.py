@@ -26,7 +26,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         model = ResearchPaper
         fields = [
             'id', 'title', 'abstract', 'is_paid_open_access', 'pdf_file', 
-            'author_name', 'status', 'rejection_reason', 'plagiarism_score', 
+            'author_name', 'status', 'rejection_reason', 'plagiarism_score', 'specialization',
             'plagiarism_report_id', 'ai_keywords', 'assistant_editor_report',
             'is_reviewed_by_assistant', 'review_blindness_type'
         ]
