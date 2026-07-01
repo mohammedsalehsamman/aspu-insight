@@ -104,7 +104,9 @@ class SubmitAssistantEditorReportAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, paper_id):
-        if not getattr(request.user, 'is_assistant_editor', False):
+        is_assistant = getattr(request.user, 'is_assistant_editor', False) or getattr(request.user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+        
+        if not is_assistant:
             return Response({"detail": "Only assistant editors can perform this action."}, status=status.HTTP_403_FORBIDDEN)
         
         paper = get_object_or_404(ResearchPaper, id=paper_id)
@@ -113,7 +115,8 @@ class SubmitAssistantEditorReportAPIView(APIView):
         if not report_text:
             return Response({"detail": "assistant_report field is required."}, status=status.HTTP_400_BAD_REQUEST)
             
-        paper.assistant_report = report_text
+        # حفظ التقرير في الحقل الموحد المطابق لقاعدة البيانات والسيريالايزر لتجنب أي تعارض
+        paper.assistant_editor_report = report_text
         paper.is_reviewed_by_assistant = True
         paper.save()
         return Response({"detail": "Report submitted successfully."}, status=status.HTTP_200_OK)
@@ -122,88 +125,39 @@ class ResearchPaperPlagiarismReportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, paper_id):
+        # 1. جلب كائن البحث أو إرجاع 404
         paper = get_object_or_404(ResearchPaper, id=paper_id)
         
-        if paper.author == request.user:
-            if not paper.is_reviewed_by_assistant and not request.user.is_staff:
-                return Response({"error": "غير مصرح لك باستعراض هذا التقرير في هذه المرحلة"}, status=status.HTTP_403_FORBIDDEN)
-        elif not request.user.is_staff and not getattr(request.user, 'is_assistant_editor', False):
-            from committees.models import Committee, CommitteeMember
-            is_editor = Committee.objects.filter(paper=paper, editor=request.user).exists()
-            is_reviewer = CommitteeMember.objects.filter(committee__paper=paper, user=request.user).exists()
-            
-            if (is_editor or is_reviewer) and not paper.is_reviewed_by_assistant:
-                return Response({"error": "غير مصرح لك باستعراض التقرير قبل انتهاء مراجعة مساعد المحرر"}, status=status.HTTP_403_FORBIDDEN)
-            if not is_editor and not is_reviewer:
-                return Response({"error": "غير مصرح لك باستعراض هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
+        # 2. تعريف كائن المستخدم الحالي بشكل صحيح لتفادي الـ NameError
+        user = request.user
 
+        # 3. التحقق من الأدوار والصلاحيات
+        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in [
+            'assistant_editor', 
+            'assistant', 
+            'reviewer_assistant'
+        ]
+
+        # 4. تطبيق منطق الحماية المنظم (إذا لم يكن المساعد، والباحث ليس هو الصاحب، نطبق السيرفس)
+        if not is_assistant and paper.author != user:
+            from research.services import ResearchPaperService  # تأكدي من مسار الاستيراد لديكم
+            if not ResearchPaperService.can_view(user, paper):
+                return Response(
+                    {"detail": "You do not have permission to view this plagiarism report."}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        # 5. جلب تقرير الانتحال المرتبط بالبحث وإرجاع البيانات
         try:
             report = paper.plagiarism_report
-            sources = report.sources.all()
-            
-            total_score = report.total_similarity_score
-            sources_count = sources.count()
-            
-            if total_score < 15.0:
-                risk_level = "Low (Safe)"
-                action_required = "Auto-approve or proceed to standard peer-review"
-            elif 15.0 <= total_score <= 30.0:
-                risk_level = "Medium (Warning)"
-                action_required = "Review highlighted sentences in the report"
-            else:
-                risk_level = "High (Danger)"
-                action_required = "Immediate rejection recommended"
-
-            highest_match = max([src.match_percentage for src in sources]) if sources else 0.0
-            
-            if highest_match > 50.0:
-                pattern = "Concentrated Plagiarism (Heavy copying from a single web source)"
-            elif sources_count > 5 and total_score > 20.0:
-                pattern = "Mosaic Plagiarism (Patchwork / structural copying from multiple sources)"
-            elif total_score > 0.0:
-                pattern = "Standard citations / Distributed similarity"
-            else:
-                pattern = "No similarity detected (Completely Original)"
-
-            plagiarism_penalty = total_score * 1.2
-            source_penalty = min(sources_count * 1.5, 15.0)
-            
-            integrity_score = 100.0 - (plagiarism_penalty + source_penalty)
-            integrity_score = max(0.0, round(integrity_score, 2))
-
-            sources_data = [
-                {
-                    "source_title": src.source_title,
-                    "source_url": src.source_url,
-                    "match_percentage": round(src.match_percentage, 2),
-                    "matched_text_snippet": src.matched_text_snippet
-                } for src in sources
-            ]
-
-            return Response({
-                "paper_id": paper.id,
-                "paper_title": paper.title if hasattr(paper, 'title') else f"Paper #{paper.id}",
-                "automated_evaluation": {
-                    "research_integrity_score": f"{integrity_score}/100",
-                    "risk_level": risk_level,
-                    "recommended_action": action_required,
-                    "detected_plagiarism_pattern": pattern
-                },
-                "raw_metrics": {
-                    "total_similarity_score": round(total_score, 2),
-                    "distinct_sources_found": sources_count,
-                    "ai_keywords": report.ai_keywords if hasattr(report, 'ai_keywords') else []
-                },
-                "detailed_sources": sources_data
-            }, status=status.HTTP_200_OK)
-
-        except PlagiarismReport.DoesNotExist:
-            return Response({
-                "paper_id": paper.id,
-                "status": paper.status,
-                "message": "تقرير الفحص غير موجود أو قيد المعالجة حالياً بواسطة نظام الذكاء الاصطناعي والـ Celery."
-            }, status=status.HTTP_204_NO_CONTENT)
-
+            from research.serializers import PlagiarismReportSerializer
+            serializer = PlagiarismReportSerializer(report, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception: # في حال عدم وجود تقرير للبحث بعد
+            return Response(
+                {"detail": "Plagiarism report not found for this paper."}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
 class AuthorDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated]
 

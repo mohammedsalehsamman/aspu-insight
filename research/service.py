@@ -27,18 +27,27 @@ class ResearchPaperService:
         if not user or not user.is_authenticated:
             return ResearchPaper.objects.filter(status='approved')
 
-        if getattr(user, 'is_assistant_editor', False):
+        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+
+        if is_assistant:
             return ResearchPaper.objects.select_related('author').all()
 
         assigned_paper_ids = CommitteeMember.objects.filter(
             user=user
         ).values_list('committee__paper_id', flat=True)
 
+        is_editor_role = getattr(user, 'role', '') == 'editor'
+        editor_query = Q(committee__editor=user, is_reviewed_by_assistant=True)
+        
+        # الاعتماد على الفحص العكسي الذكي: إذا لم تكن هناك لجنة بعد (أي قيد الانتظار للتعيين)
+        if is_editor_role:
+            editor_query = editor_query | Q(is_reviewed_by_assistant=True, committee__isnull=True)
+
         return ResearchPaper.objects.filter(
             Q(status='approved') |
             Q(author=user) |
             Q(id__in=assigned_paper_ids) |
-            Q(committee__editor=user, is_reviewed_by_assistant=True)
+            editor_query
         ).select_related('author').distinct()
 
     @staticmethod
@@ -53,7 +62,9 @@ class ResearchPaperService:
         if not user or not user.is_authenticated:
             return False
 
-        if getattr(user, 'is_assistant_editor', False):
+        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'reviewer_assistant']
+
+        if is_assistant:
             return True
 
         if paper.author == user or user.is_staff: 
