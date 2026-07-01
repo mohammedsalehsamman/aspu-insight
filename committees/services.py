@@ -296,3 +296,19 @@ class CommitteeService:
         }
 
         return response_data, is_blinded
+    @staticmethod
+    def get_available_reviewers(user, paper_id):
+        if getattr(user, 'role', '') != 'editor' and not user.is_staff:
+            raise PermissionDenied("غير مصرح لك.")
+
+        try:
+            paper = ResearchPaper.objects.get(id=paper_id)
+        except ResearchPaper.DoesNotExist:
+            raise NotFound("البحث غير موجود.")
+
+        available_reviewers = User.objects.filter(
+            role='reviewer',
+            specialization=paper.specialization
+        ).exclude(user_id=paper.author_id)
+
+        return available_reviewers

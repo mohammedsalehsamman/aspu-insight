@@ -61,3 +61,14 @@ class FetchResearchPaperDetailsAPIView(APIView):
             paper_id=paper_id
         )
         return Response(response_data, status=status.HTTP_200_OK)
+class GetAvailableReviewersAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, paper_id):
+        reviewers = CommitteeService.get_available_reviewers(
+            user=request.user, 
+            paper_id=paper_id
+        )
+        from committees.serializers import CommitteeMemberUserSerializer
+        serializer = CommitteeMemberUserSerializer(reviewers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)

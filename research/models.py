@@ -19,7 +19,7 @@ class ResearchPaper(models.Model):
     rejection_reason = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+    specialization=models.DateTimeField(max_length=32,null=True,blank=False)
     assistant_editor_report = models.TextField(blank=True, null=True)
     is_reviewed_by_assistant = models.BooleanField(default=False)
     review_blindness_type = models.CharField(
