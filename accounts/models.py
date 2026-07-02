@@ -22,7 +22,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='author')
     institution = models.CharField(max_length=200, blank=True)
     orcid_id = models.CharField(max_length=50, blank=True)
-    profile_picture_url = models.URLField(max_length=500, blank=True, null=True)
+    profile_picture_url = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
     bio = models.TextField(blank=True)
     preferred_language = models.CharField(max_length=5, default='ar')
     is_active = models.BooleanField(default=True)
