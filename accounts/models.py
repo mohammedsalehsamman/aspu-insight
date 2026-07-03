@@ -4,7 +4,6 @@ from django.utils import timezone
 import pyotp
 from .managers import CustomUserManager
 
-
 ROLE_CHOICES = [
     ('admin', 'مدير النظام'),
     ('editor', 'محرر'),
@@ -13,7 +12,6 @@ ROLE_CHOICES = [
     ('author', 'باحث'),
     ('reader', 'قارئ'),
 ]
-
 
 class User(AbstractBaseUser, PermissionsMixin):
     user_id = models.AutoField(primary_key=True)
@@ -31,9 +29,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(null=True, blank=True)
-    specialization=models.CharField(max_length=32,null=True,blank=False)
     
-    two_factor_secret = models.CharField(max_length=32, blank=True,null=True)
+    specialization = models.CharField(max_length=32, null=False, blank=False)
+    
+    two_factor_secret = models.CharField(max_length=32, blank=True, null=True)
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['full_name']
@@ -77,7 +76,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_reader(self):
         return self.role == 'reader'
-
 
 class PasswordResetToken(models.Model):
     token_id = models.AutoField(primary_key=True)

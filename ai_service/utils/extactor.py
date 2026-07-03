@@ -1,7 +1,7 @@
 import re
 
 class TextExtractor:
-    def init(self, chunk_size=30):
+    def __init__(self, chunk_size=30):
         self.chunk_size = chunk_size
 
     def clean_text(self, text: str) -> str:

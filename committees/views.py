@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from .services import CommitteeService
-
+from .serializers import CommitteeMemberUserSerializer
 class CreateCommitteeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -61,14 +61,26 @@ class FetchResearchPaperDetailsAPIView(APIView):
             paper_id=paper_id
         )
         return Response(response_data, status=status.HTTP_200_OK)
+
+
+
+
 class GetAvailableReviewersAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, paper_id):
+        # 1. جلب المحكمين باستخدام الخدمة التي قمنا بتعديلها
         reviewers = CommitteeService.get_available_reviewers(
             user=request.user, 
             paper_id=paper_id
         )
-        from committees.serializers import CommitteeMemberUserSerializer
+        
+        # 2. طباعة للتأكد من وصول البيانات للـ View
+        print(f"--- [DEBUG] View received {len(reviewers)} reviewers ---")
+        
+        # 3. التأكد من أن القائمة ليست فارغة قبل السريالايزر
+        if not reviewers:
+            return Response({"detail": "No matching reviewers found."}, status=status.HTTP_404_NOT_FOUND)
+
         serializer = CommitteeMemberUserSerializer(reviewers, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

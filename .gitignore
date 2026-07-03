@@ -224,3 +224,4 @@ media
 
 # Hugging Face model cache (Claim-to-Evidence Graph)
 .hf_cache/
+my-model/

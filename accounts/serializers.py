@@ -6,7 +6,6 @@ from .models import User, PasswordResetToken
 
 
 class UserSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = User
         fields = [
@@ -14,6 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
             'institution', 'orcid_id', 'profile_picture_url',
             'bio', 'preferred_language', 'is_active',
             'email_verified', 'created_at', 'updated_at', 'last_login',
+            'specialization'
         ]
         read_only_fields = ['user_id', 'email', 'created_at', 'updated_at', 'last_login']
 
@@ -21,12 +21,24 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True, label='تأكيد كلمة المرور')
+    
+    # جعل الحقل إجبارياً ومنع تمريره فارغاً في الـ API
+    specialization = serializers.CharField(
+        required=True, 
+        allow_blank=False, 
+        allow_null=False,
+        error_messages={
+            "required": "حقل الاختصاص مطلوب ولا يمكن تركه فارغاً.",
+            "blank": "لا يمكن ترك الاختصاص فارغاً."
+        }
+    )
 
     class Meta:
         model = User
         fields = [
             'full_name', 'email', 'password', 'password2',
             'role', 'institution', 'orcid_id', 'preferred_language', 'bio',
+            'specialization'
         ]
         extra_kwargs = {
             'role': {'default': 'author'},
@@ -49,6 +61,7 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        # هنا تم إضافة حقل الاختصاص ليتم حفظه في قاعدة البيانات أثناء الإنشاء
         user = User.objects.create_user(
             email=validated_data['email'],
             full_name=validated_data['full_name'],
@@ -58,6 +71,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             orcid_id=validated_data.get('orcid_id', ''),
             preferred_language=validated_data.get('preferred_language', 'ar'),
             bio=validated_data.get('bio', ''),
+            specialization=validated_data['specialization'],
             email_verified=False,
             is_active=True,
         )
@@ -91,7 +105,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = [
             'user_id', 'full_name', 'institution', 'orcid_id',
             'profile_picture_url', 'bio', 'preferred_language',
-            'email', 'role', 'email_verified', 'created_at', 'updated_at',
+            'email', 'role', 'specialization', 'email_verified', 'created_at', 'updated_at',
         ]
         read_only_fields = ['user_id', 'email', 'role', 'email_verified', 'created_at', 'updated_at']
 
@@ -146,7 +160,7 @@ class UserListSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'user_id', 'full_name', 'email', 'role',
-            'institution', 'is_active','specialization', 'email_verified',
+            'institution', 'is_active', 'specialization', 'email_verified',
             'created_at', 'last_login'
         ]
 
@@ -157,5 +171,5 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'full_name', 'role', 'institution', 'orcid_id',
             'profile_picture_url', 'bio', 'preferred_language',
-            'is_active', 'email_verified',
+            'is_active', 'specialization', 'email_verified',
         ]

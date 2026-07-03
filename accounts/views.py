@@ -164,7 +164,7 @@ class Verify2FAView(APIView):
 
 
 class ProfileView(APIView):
-    zpermission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = ProfileSerializer(request.user)

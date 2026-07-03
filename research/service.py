@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from research.models import ResearchPaper
@@ -12,7 +13,7 @@ class ResearchPaperService:
             author=user,
             **validated_data
         )
-        check_paper_plagiarism_task.delay(paper.id)
+        transaction.on_commit(lambda: check_paper_plagiarism_task.delay(paper.id))
         return paper
 
     @staticmethod
@@ -39,7 +40,6 @@ class ResearchPaperService:
         is_editor_role = getattr(user, 'role', '') == 'editor'
         editor_query = Q(committee__editor=user, is_reviewed_by_assistant=True)
         
-        # الاعتماد على الفحص العكسي الذكي: إذا لم تكن هناك لجنة بعد (أي قيد الانتظار للتعيين)
         if is_editor_role:
             editor_query = editor_query | Q(is_reviewed_by_assistant=True, committee__isnull=True)
 
