@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -7,6 +8,11 @@ from rest_framework.exceptions import ValidationError, PermissionDenied, NotFoun
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
+=======
+from django.contrib.auth import get_user_model
+from django.db import transaction
+from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 from committees.models import Committee, CommitteeMember
 from committees.utils import send_committee_expiry_email, send_substitute_invitation_email
 from research.models import ResearchPaper
@@ -14,6 +20,7 @@ from research.models import ResearchPaper
 User = get_user_model()
 
 
+<<<<<<< HEAD
 class AIReviewerMatcherService:
     _model = None
 
@@ -86,6 +93,13 @@ class CommitteeService:
         return ranked_reviewers
     @staticmethod
     def create_committee(user, paper_id, primary_ids, substitute_ids, blinding_type):
+=======
+class CommitteeService:
+
+    @staticmethod
+    def create_committee(user, paper_id, primary_ids, substitute_ids, blinding_type):
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         if getattr(user, 'role', '') != 'editor' and not user.is_staff:
             raise PermissionDenied("غير مصرح لك.")
 
@@ -111,7 +125,13 @@ class CommitteeService:
             raise ValidationError("تكرار محكمين غير مسموح.")
 
         all_ids = list(set(primary_ids + substitute_ids))
+<<<<<<< HEAD
         users = User.objects.filter(user_id__in=all_ids)
+=======
+
+        users = User.objects.filter(user_id__in=all_ids)
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         if users.count() != len(all_ids):
             raise ValidationError("يوجد مستخدم غير موجود.")
 
@@ -149,10 +169,21 @@ class CommitteeService:
                     for u_id in substitute_ids
                 ]
             ])
+<<<<<<< HEAD
         return committee
 
     @staticmethod
     def handle_reviewer_response(user, member_id, is_approved):
+=======
+
+        return committee
+
+    # =====================================================
+
+    @staticmethod
+    def handle_reviewer_response(user, member_id, is_approved):
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         if getattr(user, 'role', '') != 'reviewer':
             raise PermissionDenied()
 
@@ -165,7 +196,14 @@ class CommitteeService:
             raise NotFound()
 
         with transaction.atomic():
+<<<<<<< HEAD
             committee = Committee.objects.select_for_update().get(id=member.committee_id)
+=======
+
+            committee = Committee.objects.select_for_update().get(
+                id=member.committee_id
+            )
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 
             if committee.status in Committee.FINAL_STATUSES:
                 raise ValidationError("القرار النهائي صدر، لا يمكن تغيير الرد.")
@@ -174,16 +212,32 @@ class CommitteeService:
                 raise ValidationError("الرد نفسه مسجَّل مسبقاً.")
 
             previously_accepted = member.is_approved is True
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
             member.is_approved = is_approved
 
             if is_approved is False:
                 member.response = 'declined'
+<<<<<<< HEAD
                 if previously_accepted:
                     member.paper_decision = 'pending'
                     if committee.status == 'approved':
                         committee.status = 'pending'
                         committee.save()
                     
+=======
+
+                if previously_accepted:
+                    # إلغاء الصوت السابق إن وجد
+                    member.paper_decision = 'pending'
+                    # إعادة اللجنة لحالة pending إذا كانت approved
+                    if committee.status == 'approved':
+                        committee.status = 'pending'
+                        committee.save()
+                    # إرسال طلب للعضو الاحتياطي الأول المتاح
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
                     substitute = CommitteeMember.objects.filter(
                         committee=committee,
                         is_substitute=True,
@@ -191,15 +245,31 @@ class CommitteeService:
                     ).first()
                     if substitute:
                         send_substitute_invitation_email(substitute)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
                 member.save()
 
             elif is_approved is True:
                 member.response = 'accepted'
+<<<<<<< HEAD
                 if member.is_substitute:
                     member.is_substitute = False
                     member.role = 'primary'
                 member.save()
 
+=======
+
+                # إذا كان احتياطياً وقبِل → ترقيته لعضو أساسي
+                if member.is_substitute:
+                    member.is_substitute = False
+                    member.role = 'primary'
+
+                member.save()
+
+                # إعادة حساب عدد الموافقين الأساسيين
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
                 approved_count = CommitteeMember.objects.filter(
                     committee=committee,
                     is_substitute=False,
@@ -209,8 +279,16 @@ class CommitteeService:
                 if approved_count == 3:
                     committee.status = 'approved'
                     committee.save()
+<<<<<<< HEAD
         return member
 
+=======
+
+        return member
+
+    # =====================================================
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
     @staticmethod
     def submit_review_decision(user, member_id, decision, comment):
         if getattr(user, 'role', '') != 'reviewer':
@@ -228,10 +306,18 @@ class CommitteeService:
 
         if member.committee.status != 'approved':
             raise ValidationError("اللجنة غير جاهزة.")
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         if decision not in VALID:
             raise ValidationError("قرار غير صالح.")
 
         with transaction.atomic():
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
             member.paper_decision = decision
             member.comments = comment
             member.save()
@@ -240,14 +326,27 @@ class CommitteeService:
                 committee=member.committee,
                 is_substitute=False
             )
+<<<<<<< HEAD
             total = all_members.count()
             voted = all_members.filter(paper_decision__in=VALID)
+=======
+
+            total = all_members.count()
+
+            voted = all_members.filter(
+                paper_decision__in=VALID
+            )
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 
             if voted.count() != total:
                 return
 
             accept = voted.filter(paper_decision='accept_paper').count()
             reject = voted.filter(paper_decision='reject_paper').count()
+<<<<<<< HEAD
+=======
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
             committee = member.committee
 
             if accept >= 2:
@@ -256,10 +355,67 @@ class CommitteeService:
                 committee.status = 'rejected'
             else:
                 committee.status = 'revision'
+<<<<<<< HEAD
             committee.save()
 
     @staticmethod
     def get_research_paper_details(user, paper_id):
+=======
+
+            committee.save()
+
+    # =====================================================
+
+    @staticmethod
+    def _try_force_decision(committee):
+        members = CommitteeMember.objects.filter(
+            committee=committee,
+            is_substitute=False
+        )
+        voted = members.exclude(paper_decision='pending')
+
+        accept = voted.filter(paper_decision='accept_paper').count()
+        reject = voted.filter(paper_decision='reject_paper').count()
+        modify = voted.filter(paper_decision='modify_paper').count()
+
+        if accept >= 2:
+            committee.status = 'accepted'
+        elif reject >= 2:
+            committee.status = 'rejected'
+        elif modify >= 2:
+            committee.status = 'revision'
+        else:
+            return False
+
+        committee.save()
+        return True
+
+    @staticmethod
+    def expire_overdue_committees():
+        from django.utils import timezone
+        overdue = Committee.objects.filter(
+            deadline__lt=timezone.now(),
+            status__in=['pending', 'approved']
+        ).select_related('editor', 'paper')
+
+        for committee in overdue:
+            with transaction.atomic():
+                committee = Committee.objects.select_for_update().get(pk=committee.pk)
+                if committee.status not in ('pending', 'approved'):
+                    continue
+                if not CommitteeService._try_force_decision(committee):
+                    committee.status = 'expired'
+                    committee.save()
+                    send_committee_expiry_email(committee)
+
+    # =====================================================
+
+    @staticmethod
+    def get_research_paper_details(user, paper_id):
+        from research.models import ResearchPaper
+        from rest_framework.exceptions import NotFound
+
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         try:
             paper = ResearchPaper.objects.select_related('author').get(id=paper_id)
         except ResearchPaper.DoesNotExist:
@@ -289,4 +445,25 @@ class CommitteeService:
             "rejection_reason": paper.rejection_reason,
             "created_at": paper.created_at.isoformat() if paper.created_at else None
         }
+<<<<<<< HEAD
         return response_data, is_blinded
+=======
+
+        return response_data, is_blinded
+    @staticmethod
+    def get_available_reviewers(user, paper_id):
+        if getattr(user, 'role', '') != 'editor' and not user.is_staff:
+            raise PermissionDenied("غير مصرح لك.")
+
+        try:
+            paper = ResearchPaper.objects.get(id=paper_id)
+        except ResearchPaper.DoesNotExist:
+            raise NotFound("البحث غير موجود.")
+
+        available_reviewers = User.objects.filter(
+            role='reviewer',
+            specialization=paper.specialization
+        ).exclude(user_id=paper.author_id)
+
+        return available_reviewers
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5

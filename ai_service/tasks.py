@@ -9,6 +9,7 @@ from .claim_evidence.services.graph_builder import extract_graph
 from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
 from .ieee_checker.infrastructure.file_parser import extract_text_from_file
 from .models import ClaimEvidenceGraphReport
+<<<<<<< HEAD
 import PyPDF2
 from celery import shared_task
 from .services.analyzer import PlagiarismAnalyzer
@@ -26,6 +27,8 @@ def extract_text(file_path):
     except Exception as e:
         print(f"Error reading PDF: {e}")
     return text
+=======
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +114,7 @@ def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
         report.processing_time_seconds = round(time.time() - start_time, 2)
         report.save(update_fields=["status", "error_message", "processing_time_seconds"])
         return {"status": "failed", "report_id": report_id, "error": str(e)}
+<<<<<<< HEAD
 
 # ai_service/tasks.py
 
@@ -138,3 +142,50 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         PlagiarismSource.objects.create(report=report, **src)
         
     return {"status": "completed", "total_score": analysis_result['total_score']}
+=======
+@shared_task(bind=True)
+def check_paper_plagiarism_task(self, paper_id: int) -> dict:
+    try:
+        paper = ResearchPaper.objects.get(id=paper_id)
+        paper.status = 'checking_plagiarism'
+        paper.save(update_fields=["status"])
+
+        raw_text = ""
+        if paper.pdf_file:
+            raw_text = extract_text_from_pdf(paper.pdf_file.path)
+
+        if not raw_text.strip():
+            raw_text = paper.abstract
+
+        # استدعاء المحلل الذكي ومعالجة القطع المتتالية
+        analyzer = PlagiarismAnalyzer(api_key="YOUR_ACTUAL_API_KEY", chunk_size=30)
+        report_data = analyzer.calculate_similarity(raw_text)
+
+        # حفظ التقرير الرئيسي وحفظ الكلمات المفتاحية الذكية
+        report = PlagiarismReport.objects.create(
+            paper=paper,
+            total_similarity_score=report_data['total_score'],
+            ai_keywords=report_data.get('ai_tags', [])
+        )
+
+        # حفظ المصادر المقتبسة من الويب بدقة
+        for src in report_data['sources']:
+            PlagiarismSource.objects.create(
+                report=report,
+                source_url=src['url'],
+                source_title=src['title'],
+                match_percentage=src['match_percentage'],
+                matched_text_snippet=src['snippet']
+            )
+
+        paper.status = 'under_review'
+        paper.save(update_fields=["status"])
+        return {"status": paper.status, "paper_id": paper_id}
+
+    except Exception as e:
+        logger.exception("Plagiarism check failed for paper %s: %s", paper_id, e)
+        if paper:
+            paper.status = 'plagiarism_failed'
+            paper.save(update_fields=["status"])
+        return {"status": "failed", "paper_id": paper_id, "error": str(e)}
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
