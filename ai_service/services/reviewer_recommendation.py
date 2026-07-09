@@ -8,16 +8,16 @@ class AIReviewerMatcherService:
     @classmethod
     def get_model(cls):
         if cls._model is None:
-            # نستخدم الموديل متعدد اللغات لضمان دعم العربية
+            
             cls._model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
         return cls._model
 
     @classmethod
     def rank_reviewers_by_specialization(cls, paper_specialization, reviewers_queryset):
-        # 1. طباعة لتشخيص عدد المحكمين القادمين من الـ Service
+       
         print(f"--- [DEBUG] Total input reviewers count: {reviewers_queryset.count()} ---")
         
-        # 2. تصفية المحكمين
+        
         reviewers_list = [r for r in reviewers_queryset if r.specialization and r.specialization.strip()]
         print(f"--- [DEBUG] Reviewers with valid specialization: {len(reviewers_list)} ---")
         
@@ -38,8 +38,8 @@ class AIReviewerMatcherService:
 
         scored_reviewers = []
         for index, score in enumerate(similarity_scores):
-            # سنقبل أي شخص لديه سكور أكبر من 0 (أي شخص لديه تخصص مكتوب)
-            if score >= 0.0: 
+            
+            if score >= 0.25: 
                 scored_reviewers.append({
                     'user_obj': reviewers_list[index],
                     'score': score
