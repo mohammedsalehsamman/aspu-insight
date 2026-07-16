@@ -84,30 +84,13 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         request = self.context.get('request')
         user = request.user if request else None
-<<<<<<< HEAD
-        if user and user.is_authenticated:
-=======
 
         if user and user.is_authenticated:
             # 1. الآدمن والباحث يمرون مباشرة بكامل البيانات
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
             if user == instance.author or user.is_staff:
                 return representation
             is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
-            
-<<<<<<< HEAD
-            committee = instance.committee if hasattr(instance, 'committee') else None
-            is_editor = (getattr(user, 'role', '') == 'editor') or (committee and committee.editor == user)
 
-            if is_assistant:
-                return representation
-                
-            if not instance.is_reviewed_by_assistant:
-                if user != instance.author and not user.is_staff and not is_assistant:
-                    return {}
-
-            if is_editor:
-=======
             # استغلال علاقة الـ OneToOneField بشكل آمن للوصول لبيانات اللجنة
             committee = instance.committee if hasattr(instance, 'committee') else None
             is_editor = (getattr(user, 'role', '') == 'editor') or (committee and committee.editor == user)
@@ -115,7 +98,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             # 2. المساعد يرى كل شيء للقيام بعمله
             if is_assistant:
                 return representation
-                
+
             # 3. صمام الأمان: إذا لم يرسل المساعد تقريره بعد، يُحجب البحث تماماً عن المحرر واللجنة
             if not instance.is_reviewed_by_assistant:
                 return {}
@@ -123,7 +106,6 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             # 4. منطق المحرر (Editor):
             if is_editor:
                 # إذا لم تشكل لجنة بعد أو حالة اللجنة قيد التشكيل (pending) -> حجب الحقول الحساسة والـ PDF
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
                 if not committee or committee.status == 'pending':
                     allowed_fields = ['id', 'title', 'abstract', 'assistant_editor_report']
                     filtered_rep = {field: representation.get(field) for field in allowed_fields}
@@ -135,15 +117,10 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
                     return filtered_rep
                 return representation
 
-<<<<<<< HEAD
-            member = CommitteeMember.objects.filter(committee__paper=instance, user=user).first()
-            if member:
-=======
             # 5. منطق المحكمين (Reviewers):
             member = CommitteeMember.objects.filter(committee__paper=instance, user=user).first()
             if member:
                 # إذا كانت اللجنة قيد التشكيل أو المحكم لم يوافق بعد على طلب الانضمام (pending) -> حجب الـ PDF
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
                 if member.committee.status == 'pending' or member.response == 'pending':
                     allowed_fields = ['id', 'title', 'abstract', 'assistant_editor_report']
                     filtered_rep = {field: representation.get(field) for field in allowed_fields if field in representation}
@@ -154,10 +131,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
                     return filtered_rep
                 return representation
 
-<<<<<<< HEAD
-=======
         # 6. للزوار غير المسجلين أو الحالات العامة الأخرى
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         from configuration.security import can_user_access_pdf
         if not can_user_access_pdf(user, instance):
             representation['pdf_file'] = None

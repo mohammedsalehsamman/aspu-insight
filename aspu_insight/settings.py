@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 """
 Django settings for aspu_insight project.
 
@@ -11,18 +9,10 @@ https://docs.djangoproject.com/en/6.0/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 import os
 from datetime import timedelta
-from pathlib import Path 
+from pathlib import Path
 from decouple import config, Csv
-
-<<<<<<< HEAD
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-SECRET_KEY = 'SECRET_KEY'
-
-=======
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,17 +25,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'SECRET_KEY'
 
 # SECURITY WARNING: don't run with debug turned on in production!
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
-<<<<<<< HEAD
-=======
-
 # Application definition
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -53,10 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-<<<<<<< HEAD
     'django_celery_results',
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
     'axes' ,
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
@@ -75,10 +57,6 @@ INSTALLED_APPS = [
     'configuration',
     'reviewerinvitation',
     'researchHistory'
-<<<<<<< HEAD
-=======
-    
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 ]
 
 MIDDLEWARE = [
@@ -91,10 +69,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'axes.middleware.AxesMiddleware'
-<<<<<<< HEAD
-=======
-    
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 ]
 
 ROOT_URLCONF = 'aspu_insight.urls'
@@ -117,13 +91,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'aspu_insight.wsgi.application'
 
-<<<<<<< HEAD
-=======
-
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -131,20 +101,11 @@ DATABASES = {
     }
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 AUTH_USER_MODEL = 'accounts.User'
 
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.EmailBackend',
     'django.contrib.auth.backends.ModelBackend',
-<<<<<<< HEAD
-=======
-    
-    
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
     'axes.backends.AxesStandaloneBackend',
 ]
 
@@ -191,18 +152,12 @@ EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='ASPU Insight <noreply@aspu-insight.dz>')
 
-<<<<<<< HEAD
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
-=======
 # ─── Frontend URL (للروابط في البريد) ────────
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
-
-
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -218,13 +173,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-<<<<<<< HEAD
-=======
-
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -233,13 +184,9 @@ USE_I18N = True
 
 USE_TZ = True
 
-<<<<<<< HEAD
-=======
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
@@ -266,25 +213,6 @@ CLAIM_EVIDENCE_ZERO_SHOT_MODEL = config('CLAIM_EVIDENCE_ZERO_SHOT_MODEL', defaul
 CLAIM_EVIDENCE_SIMILARITY_THRESHOLD = config('CLAIM_EVIDENCE_SIMILARITY_THRESHOLD', default=0.5, cast=float)
 CLAIM_EVIDENCE_TOP_CLAIMS_COUNT = config('CLAIM_EVIDENCE_TOP_CLAIMS_COUNT', default=10, cast=int)
 
-<<<<<<< HEAD
-# في ملف settings.py التابع للمجلد aspu_insight
-
-# 1. روابط نظيفة تماماً بدون أي علامات استفهام
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-
-# 2. الحل السحري النهائي لمنع بروتوكول RESP3 وإلغاء أمر HELLO نهائياً
-CELERY_BROKER_TRANSPORT_OPTIONS = {
-    'global_keyprefix': 'aspu_',
-    'connection_class': 'redis.connection.Connection',  # إجبار على الكلاس الكلاسيكي المتوافق مع ويندوز
-}
-
-CELERY_REDIS_BACKEND_TRANSPORT_OPTIONS = {
-    'global_keyprefix': 'aspu_res_',
-    'connection_class': 'redis.connection.Connection',
-}
-=======
-
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
@@ -293,7 +221,6 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     'check-committee-deadlines-daily': {
@@ -302,10 +229,4 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-<<<<<<< HEAD
 COMMITTEE_DEADLINE_DAYS = 15
-=======
-COMMITTEE_DEADLINE_DAYS = 15
-
-
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5

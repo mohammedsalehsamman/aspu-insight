@@ -3,11 +3,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from .services import CommitteeService
-<<<<<<< HEAD
 from .serializers import CommitteeMemberUserSerializer
-=======
 
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 class CreateCommitteeAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -65,36 +62,15 @@ class FetchResearchPaperDetailsAPIView(APIView):
             paper_id=paper_id
         )
         return Response(response_data, status=status.HTTP_200_OK)
-<<<<<<< HEAD
 
 
-
-
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 class GetAvailableReviewersAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, paper_id):
-<<<<<<< HEAD
-        
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         reviewers = CommitteeService.get_available_reviewers(
-            user=request.user, 
+            user=request.user,
             paper_id=paper_id
         )
-<<<<<<< HEAD
-        
-      
-        print(f"--- [DEBUG] View received {len(reviewers)} reviewers ---")
-        
-        
-        if not reviewers:
-            return Response({"detail": "No matching reviewers found."}, status=status.HTTP_404_NOT_FOUND)
-
-=======
-        from committees.serializers import CommitteeMemberUserSerializer
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         serializer = CommitteeMemberUserSerializer(reviewers, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

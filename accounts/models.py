@@ -4,10 +4,6 @@ from django.utils import timezone
 import pyotp
 from .managers import CustomUserManager
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 ROLE_CHOICES = [
     ('admin', 'مدير النظام'),
     ('editor', 'محرر'),
@@ -17,10 +13,6 @@ ROLE_CHOICES = [
     ('reader', 'قارئ'),
 ]
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 class User(AbstractBaseUser, PermissionsMixin):
     user_id = models.AutoField(primary_key=True)
     full_name = models.CharField(max_length=150)
@@ -37,16 +29,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     last_login = models.DateTimeField(null=True, blank=True)
-<<<<<<< HEAD
-    
-    specialization = models.CharField(max_length=32, null=False, blank=False)
-    
+    specialization = models.CharField(max_length=32, null=True, blank=False)
+
     two_factor_secret = models.CharField(max_length=32, blank=True, null=True)
-=======
-    specialization=models.CharField(max_length=32,null=True,blank=False)
-    
-    two_factor_secret = models.CharField(max_length=32, blank=True,null=True)
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['full_name']
@@ -91,10 +76,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     def is_reader(self):
         return self.role == 'reader'
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 class PasswordResetToken(models.Model):
     token_id = models.AutoField(primary_key=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='reset_tokens', db_column='user_id')

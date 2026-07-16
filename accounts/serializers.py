@@ -6,10 +6,6 @@ from .models import User, PasswordResetToken
 
 
 class UserSerializer(serializers.ModelSerializer):
-<<<<<<< HEAD
-=======
-
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
     class Meta:
         model = User
         fields = [
@@ -17,10 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
             'institution', 'orcid_id', 'profile_picture_url',
             'bio', 'preferred_language', 'is_active',
             'email_verified', 'created_at', 'updated_at', 'last_login',
-<<<<<<< HEAD
             'specialization'
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         ]
         read_only_fields = ['user_id', 'email', 'created_at', 'updated_at', 'last_login']
 
@@ -28,30 +21,23 @@ class UserSerializer(serializers.ModelSerializer):
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True, required=True, label='تأكيد كلمة المرور')
-<<<<<<< HEAD
-    
-    # جعل الحقل إجبارياً ومنع تمريره فارغاً في الـ API
+
     specialization = serializers.CharField(
-        required=True, 
-        allow_blank=False, 
+        required=True,
+        allow_blank=False,
         allow_null=False,
         error_messages={
             "required": "حقل الاختصاص مطلوب ولا يمكن تركه فارغاً.",
             "blank": "لا يمكن ترك الاختصاص فارغاً."
         }
     )
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 
     class Meta:
         model = User
         fields = [
             'full_name', 'email', 'password', 'password2',
             'role', 'institution', 'orcid_id', 'preferred_language', 'bio',
-<<<<<<< HEAD
             'specialization'
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         ]
         extra_kwargs = {
             'role': {'default': 'author'},
@@ -74,10 +60,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-<<<<<<< HEAD
-        # هنا تم إضافة حقل الاختصاص ليتم حفظه في قاعدة البيانات أثناء الإنشاء
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         user = User.objects.create_user(
             email=validated_data['email'],
             full_name=validated_data['full_name'],
@@ -87,10 +69,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             orcid_id=validated_data.get('orcid_id', ''),
             preferred_language=validated_data.get('preferred_language', 'ar'),
             bio=validated_data.get('bio', ''),
-<<<<<<< HEAD
             specialization=validated_data['specialization'],
-=======
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
             email_verified=False,
             is_active=True,
         )
@@ -124,11 +103,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         fields = [
             'user_id', 'full_name', 'institution', 'orcid_id',
             'profile_picture_url', 'bio', 'preferred_language',
-<<<<<<< HEAD
             'email', 'role', 'specialization', 'email_verified', 'created_at', 'updated_at',
-=======
-            'email', 'role', 'email_verified', 'created_at', 'updated_at',
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
         ]
         read_only_fields = ['user_id', 'email', 'role', 'email_verified', 'created_at', 'updated_at']
 
@@ -183,11 +158,7 @@ class UserListSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'user_id', 'full_name', 'email', 'role',
-<<<<<<< HEAD
             'institution', 'is_active', 'specialization', 'email_verified',
-=======
-            'institution', 'is_active','specialization', 'email_verified',
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
             'created_at', 'last_login'
         ]
 
@@ -198,10 +169,5 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'full_name', 'role', 'institution', 'orcid_id',
             'profile_picture_url', 'bio', 'preferred_language',
-<<<<<<< HEAD
             'is_active', 'specialization', 'email_verified',
         ]
-=======
-            'is_active', 'email_verified',
-        ]
->>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
