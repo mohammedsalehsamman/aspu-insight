@@ -164,10 +164,10 @@ class Verify2FAView(APIView):
 
 
 class ProfileView(APIView):
-    zpermission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        serializer = ProfileSerializer(request.user)
+        serializer = ProfileSerializer(request.user, context={'request': request})
         return Response(serializer.data)
 
     def put(self, request):
@@ -177,7 +177,8 @@ class ProfileView(APIView):
         return self._update(request, partial=True)
 
     def _update(self, request, partial):
-        serializer = ProfileSerializer(request.user, data=request.data, partial=partial)
+        serializer = ProfileSerializer(request.user, data=request.data, partial=partial,
+                                        context={'request': request})
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

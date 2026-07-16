@@ -2,6 +2,8 @@ from django.db import models
 from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
+from research.validators import validate_file_size
+
 class ResearchPaper(models.Model):
     class Status(models.TextChoices):
         PENDING             = 'pending',             'Pending'
@@ -17,7 +19,8 @@ class ResearchPaper(models.Model):
 
     title = models.CharField(max_length=255)
     abstract = models.TextField()
-    pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True)
+    pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True,
+                             validators=[validate_file_size])
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
     is_paid_open_access = models.BooleanField(default=False)
     status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)
