@@ -9,6 +9,26 @@ from .claim_evidence.services.graph_builder import extract_graph
 from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
 from .ieee_checker.infrastructure.file_parser import extract_text_from_file
 from .models import ClaimEvidenceGraphReport
+<<<<<<< HEAD
+import PyPDF2
+from celery import shared_task
+from .services.analyzer import PlagiarismAnalyzer
+from .services.academic import AcademicSearchService
+from .utils.ai_keywordExtractor import AIKeywordExtractor
+from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
+
+def extract_text(file_path):
+    text = ""
+    try:
+        with open(file_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            for page in reader.pages:
+                text += page.extract_text() or ""
+    except Exception as e:
+        print(f"Error reading PDF: {e}")
+    return text
+=======
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +114,35 @@ def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
         report.processing_time_seconds = round(time.time() - start_time, 2)
         report.save(update_fields=["status", "error_message", "processing_time_seconds"])
         return {"status": "failed", "report_id": report_id, "error": str(e)}
+<<<<<<< HEAD
+
+# ai_service/tasks.py
+
+
+@shared_task(bind=True)
+def check_paper_plagiarism_task(self, paper_id: int) -> dict:
+    paper = ResearchPaper.objects.get(id=paper_id)
+    raw_text = extract_text(paper.pdf_file.path)
+    
+    extractor = AIKeywordExtractor()
+    keywords = extractor.extract_pure_keywords(raw_text)
+    
+    analyzer = PlagiarismAnalyzer()
+    analysis_result = analyzer.calculate_similarity(raw_text, paper_id)
+    
+    sources = AcademicSearchService.search_sources(keywords)
+    
+    report = PlagiarismReport.objects.create(
+        paper=paper,
+        total_similarity_score=analysis_result['total_score'],
+        ai_keywords=keywords
+    )
+    
+    for src in sources:
+        PlagiarismSource.objects.create(report=report, **src)
+        
+    return {"status": "completed", "total_score": analysis_result['total_score']}
+=======
 @shared_task(bind=True)
 def check_paper_plagiarism_task(self, paper_id: int) -> dict:
     try:
@@ -139,3 +188,4 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
             paper.status = 'plagiarism_failed'
             paper.save(update_fields=["status"])
         return {"status": "failed", "paper_id": paper_id, "error": str(e)}
+>>>>>>> 8009729a235f7b93b8bdf2dd63e85d842a3aade5

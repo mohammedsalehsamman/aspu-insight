@@ -1,17 +1,24 @@
+
+import os
+from django.conf import settings
+
 from keybert import KeyBERT
 
 class AIKeywordExtractor:
     _instance = None
     _model = None
 
-    def new(cls, *args, **kwargs):
+
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
-            cls._instance = super(AIKeywordExtractor, cls).new(cls, *args, **kwargs)
+            cls._instance = super(AIKeywordExtractor, cls).__new__(cls, *args, **kwargs)
         return cls._instance
 
-    def init(self):
+    def __init__(self):
         if AIKeywordExtractor._model is None:
-            AIKeywordExtractor._model = KeyBERT()
+            local_model_path = os.path.join(settings.BASE_DIR, 'my-model')
+            AIKeywordExtractor._model = KeyBERT(model=local_model_path)
+            
 
     def extract_pure_keywords(self, text: str, top_n=10) -> list:
         if not text or len(text.strip()) < 10:
