@@ -20,6 +20,8 @@ class ReferenceEntry:
     crossref_verified: Optional[bool] = None
     crossref_message: str = ""
     ieee_score: float = 0.0
+    extraction_method: str = "regex_fallback"
+    extraction_confidence: float = 0.0
 
 
 @dataclass
@@ -42,10 +44,15 @@ class IEEECheckResult:
     citation_matching_score: float = 0.0
     format_score: float = 0.0
     crossref_score: float = 0.0
+    structure_score: float = 0.0
     overall_score: float = 0.0
     summary: str = ""
     recommendations: List[str] = field(default_factory=list)
     status: str = "pending"
+    detected_sections: List[str] = field(default_factory=list)
+    missing_required_sections: List[str] = field(default_factory=list)
+    section_order_valid: bool = True
+    citation_mismatches: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

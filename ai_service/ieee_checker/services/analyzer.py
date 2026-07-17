@@ -3,17 +3,18 @@ import time
 import logging
 from typing import Any, Dict
 
+from django.conf import settings
+
 from ..domain.entities import IEEECheckResult, ReferenceEntry
 from ..infrastructure.file_parser import extract_text_from_file
 from .citation_extractor import detect_language, extract_paper_title, extract_in_text_citations
-from .reference_parser import find_references_section, split_references_section, parse_ieee_reference
-from .format_validator import (
-    validate_ieee_format,
-    compute_ieee_score,
-    calculate_scores,
-    generate_recommendations,
-    generate_summary,
-)
+from .reference_parser import find_references_section, split_references_section
+from .reference_extractor_ai import extract_reference_fields
+from .format_validator_ai import validate_ieee_format_ai
+from .format_validator import compute_ieee_score, calculate_scores
+from .section_structure_checker import check_paper_structure
+from .citation_semantic_matcher import find_citation_mismatches
+from .recommendation_generator_ai import generate_recommendations_and_summary_ai
 from .crossref_client import verify_doi
 
 logger = logging.getLogger(__name__)
@@ -47,11 +48,20 @@ def perform_ieee_analysis(
     ref_section = find_references_section(full_text)
     raw_refs = split_references_section(ref_section) if ref_section else []
 
+    max_llm_refs = getattr(settings, "IEEE_CHECKER_MAX_LLM_REFS", 30)
+
     ref_map: Dict[int, ReferenceEntry] = {}
     crossref_calls = 0
 
-    for ref_num, ref_text in raw_refs:
-        parsed = parse_ieee_reference(ref_text)
+    for i, (ref_num, ref_text) in enumerate(raw_refs):
+        if i < max_llm_refs:
+            parsed = extract_reference_fields(ref_text)
+        else:
+            from .reference_parser import parse_ieee_reference
+            parsed = parse_ieee_reference(ref_text)
+            parsed['extraction_method'] = "regex_fallback"
+            parsed['extraction_confidence'] = 0.0
+
         entry = ReferenceEntry(
             index=ref_num,
             raw_text=ref_text[:300],
@@ -64,9 +74,11 @@ def perform_ieee_analysis(
             volume=parsed['volume'],
             issue=parsed['issue'],
             pages=parsed['pages'],
+            extraction_method=parsed.get('extraction_method', 'regex_fallback'),
+            extraction_confidence=parsed.get('extraction_confidence', 0.0),
         )
 
-        entry.format_errors = validate_ieee_format(entry)
+        entry.format_errors = validate_ieee_format_ai(entry)
         entry.ieee_score = compute_ieee_score(entry.format_errors)
 
         if verify_crossref and entry.doi and crossref_calls < max_crossref_calls:
@@ -112,8 +124,17 @@ def perform_ieee_analysis(
             f"... و {len(all_format_errors) - _MAX_FORMAT_ISSUES_SHOWN} مشكلة إضافية"
         )
 
+    structure = check_paper_structure(full_text)
+    result.detected_sections = structure['detected_sections']
+    result.missing_required_sections = structure['missing_required_sections']
+    result.section_order_valid = structure['section_order_valid']
+    result.structure_score = structure['structure_score']
+
+    result.citation_mismatches = find_citation_mismatches(
+        full_text, result.citations_in_text, result.references
+    )
+
     result = calculate_scores(result)
-    result.recommendations = generate_recommendations(result)
-    result.summary = generate_summary(result)
+    result.summary, result.recommendations = generate_recommendations_and_summary_ai(result)
 
     return result.to_dict()

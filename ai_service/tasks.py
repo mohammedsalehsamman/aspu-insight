@@ -7,8 +7,9 @@ from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
 from .services.analyzer import PlagiarismAnalyzer
 from .claim_evidence.services.graph_builder import extract_graph
 from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
+from .ieee_checker.services.analyzer import perform_ieee_analysis
 from .ieee_checker.infrastructure.file_parser import extract_text_from_file
-from .models import ClaimEvidenceGraphReport
+from .models import ClaimEvidenceGraphReport, IEEECheckReport
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,58 @@ def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
         report.processing_time_seconds = round(time.time() - start_time, 2)
         report.save(update_fields=["status", "error_message", "processing_time_seconds"])
         return {"status": "failed", "report_id": report_id, "error": str(e)}
+
+
+@shared_task(bind=True)
+def analyze_ieee_check_task(self, report_id: int) -> dict:
+    try:
+        report = IEEECheckReport.objects.get(pk=report_id)
+    except IEEECheckReport.DoesNotExist:
+        logger.error("IEEECheckReport %s not found", report_id)
+        return {"status": "failed", "report_id": report_id, "error": "report not found"}
+
+    start_time = time.time()
+
+    try:
+        file_path = report.pdf_file.path
+        raw_result = perform_ieee_analysis(
+            file_path=file_path,
+            verify_crossref=report.full_result.get("verify_crossref", True),
+            max_crossref_calls=5,
+        )
+
+        processing_time = round(time.time() - start_time, 2)
+
+        report.paper_title = raw_result.get('paper_title', '')
+        report.detected_language = raw_result.get('detected_language', '')
+        report.total_pages = raw_result.get('total_pages', 0)
+        report.total_citations_in_text = len(raw_result.get('citations_in_text', []))
+        report.total_references = raw_result.get('total_references', 0)
+        report.missing_citations_count = len(raw_result.get('citations_missing_from_references', []))
+        report.unused_references_count = len(raw_result.get('unused_references', []))
+        report.citation_matching_score = raw_result.get('citation_matching_score', 0.0)
+        report.format_score = raw_result.get('format_score', 0.0)
+        report.crossref_score = raw_result.get('crossref_score', 0.0)
+        report.overall_score = raw_result.get('overall_score', 0.0)
+        report.status = raw_result.get('status', IEEECheckReport.Status.ERROR)
+        report.summary = raw_result.get('summary', '')
+        report.crossref_checked = raw_result.get('crossref_checked', 0)
+        report.crossref_verified = raw_result.get('crossref_verified_count', 0)
+        report.processing_time_seconds = processing_time
+        report.full_result = raw_result
+        report.save()
+
+        return {"status": report.status, "report_id": report_id}
+
+    except Exception as e:
+        logger.exception("IEEE analysis failed for report %s: %s", report_id, e)
+        report.status = IEEECheckReport.Status.ERROR
+        report.summary = f"فشل في معالجة الملف: {str(e)}"
+        report.processing_time_seconds = round(time.time() - start_time, 2)
+        report.save(update_fields=["status", "summary", "processing_time_seconds"])
+        return {"status": "failed", "report_id": report_id, "error": str(e)}
+
+
 @shared_task(bind=True)
 def check_paper_plagiarism_task(self, paper_id: int) -> dict:
     paper = None

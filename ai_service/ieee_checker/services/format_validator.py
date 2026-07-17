@@ -79,16 +79,18 @@ def calculate_scores(result: IEEECheckResult) -> IEEECheckResult:
     if result.crossref_checked == 0:
         result.crossref_score = 0.0
         result.overall_score = round(
-            result.citation_matching_score * 0.50
-            + result.format_score * 0.50,
+            result.citation_matching_score * 0.35
+            + result.format_score * 0.35
+            + result.structure_score * 0.30,
             1,
         )
     else:
         result.crossref_score = (result.crossref_verified_count / result.crossref_checked) * 100.0
         result.overall_score = round(
-            result.citation_matching_score * 0.40
-            + result.format_score * 0.40
-            + result.crossref_score * 0.20,
+            result.citation_matching_score * 0.30
+            + result.format_score * 0.30
+            + result.structure_score * 0.25
+            + result.crossref_score * 0.15,
             1,
         )
 
@@ -104,6 +106,17 @@ def calculate_scores(result: IEEECheckResult) -> IEEECheckResult:
 
 def generate_recommendations(result: IEEECheckResult) -> List[str]:
     recs: List[str] = []
+
+    if result.missing_required_sections:
+        secs = "، ".join(result.missing_required_sections)
+        recs.append(f"أقسام ناقصة في هيكل الورقة: {secs}")
+
+    if not result.section_order_valid:
+        recs.append("ترتيب أقسام الورقة لا يتبع التسلسل المتعارف عليه (Abstract → Introduction → ... → Conclusion → References)")
+
+    if result.citation_mismatches:
+        nums = ", ".join(f"[{m['citation']}]" for m in result.citation_mismatches[:5])
+        recs.append(f"استشهادات قد لا تكون مرتبطة موضوعياً بمراجعها: {nums}")
 
     if result.citations_missing_from_references:
         nums = ", ".join(f"[{n}]" for n in sorted(result.citations_missing_from_references))
@@ -154,6 +167,7 @@ def generate_summary(result: IEEECheckResult) -> str:
         f"الصفحات: {result.total_pages} | "
         f"الاستشهادات في النص: {len(result.citations_in_text)} | "
         f"إجمالي المراجع: {result.total_references} | "
+        f"درجة الهيكل: {result.structure_score}/100 | "
         f"الدرجة: {result.overall_score}/100 | "
         f"الحالة: {status_ar}"
     )
