@@ -1,3 +1,8 @@
 from django.contrib import admin
 
-# Register your models here.
+from configuration.models import JournalConfiguration
+
+
+@admin.register(JournalConfiguration)
+class JournalConfigurationAdmin(admin.ModelAdmin):
+    list_display = ['id', 'system_mode']

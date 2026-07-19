@@ -31,9 +31,17 @@ class ResearchPaper(models.Model):
     assistant_editor_report = models.TextField(blank=True, null=True)
     is_reviewed_by_assistant = models.BooleanField(default=False)
     review_blindness_type = models.CharField(
-        max_length=20, 
-        choices=[('single_blind', 'Single Blind'), ('double_blind', 'Double Blind'), ('open_review', 'Open Review')], 
+        max_length=20,
+        choices=[('single_blind', 'Single Blind'), ('double_blind', 'Double Blind'), ('open_review', 'Open Review')],
         default='double_blind'
+    )
+    assigned_editor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_papers',
+        limit_choices_to={'role': 'editor'},
     )
 
     class Meta:

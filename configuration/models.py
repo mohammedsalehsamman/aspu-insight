@@ -21,5 +21,5 @@ class JournalConfiguration(models.Model):
         verbose_name = "إعدادات الوصول للمجلة"
         verbose_name_plural = "إعدادات الوصول للمجلة"
 
-    def str(self):
+    def __str__(self):
         return f"النمط الحالي للمجلة: {self.get_system_mode_display()}"

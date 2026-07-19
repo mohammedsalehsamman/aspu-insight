@@ -33,6 +33,21 @@ urlpatterns = [
         include((admin_urlpatterns, 'admin-api'))
     ),
 
+    path(
+        'api/admin/2004-R/dashboard/',
+        include('dashboard.urls')
+    ),
+
+    path(
+        'api/admin/2004-R/configuration/',
+        include('configuration.urls')
+    ),
+
+    path(
+        'api/admin/2004-R/research-history/',
+        include('researchHistory.urls')
+    ),
+
     # AI Service APIs
     path(
         'api/ai/ai2004-R/',

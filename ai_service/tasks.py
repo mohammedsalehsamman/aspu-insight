@@ -10,6 +10,7 @@ from .ieee_checker.services.citation_extractor import detect_language, extract_p
 from .ieee_checker.services.analyzer import perform_ieee_analysis
 from .ieee_checker.infrastructure.file_parser import extract_text_from_file
 from .models import ClaimEvidenceGraphReport, IEEECheckReport
+from researchHistory.services import log_status_change
 
 logger = logging.getLogger(__name__)
 
@@ -152,8 +153,10 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
     paper = None
     try:
         paper = ResearchPaper.objects.get(id=paper_id)
+        from_status = paper.status
         paper.status = 'checking_plagiarism'
         paper.save(update_fields=["status"])
+        log_status_change(paper, from_status, paper.status, note="Automated plagiarism check started")
 
         raw_text = ""
         if paper.pdf_file:
@@ -183,13 +186,17 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
                 matched_text_snippet=src['snippet']
             )
 
+        from_status = paper.status
         paper.status = 'editor_review'
         paper.save(update_fields=["status"])
+        log_status_change(paper, from_status, paper.status, note="Plagiarism check passed")
         return {"status": paper.status, "paper_id": paper_id}
 
     except Exception as e:
         logger.exception("Plagiarism check failed for paper %s: %s", paper_id, e)
         if paper:
+            from_status = paper.status
             paper.status = 'plagiarism_failed'
             paper.save(update_fields=["status"])
+            log_status_change(paper, from_status, paper.status, note=f"Plagiarism check error: {e}")
         return {"status": "failed", "paper_id": paper_id, "error": str(e)}

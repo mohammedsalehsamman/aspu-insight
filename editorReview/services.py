@@ -28,6 +28,13 @@ STATUS_BY_DECISION = {
 class EditorReviewService:
 
     @staticmethod
+    def _check_assigned_editor(paper, editor):
+        if paper.assigned_editor_id and paper.assigned_editor_id != editor.user_id and editor.role != 'admin':
+            raise ValidationError(
+                "This paper is assigned to a different editor."
+            )
+
+    @staticmethod
     def _apply_transition(paper, editor, review, note):
 
         from_status = paper.status
@@ -50,6 +57,8 @@ class EditorReviewService:
             raise ValidationError(
                 "Paper is not awaiting editor review."
             )
+
+        EditorReviewService._check_assigned_editor(paper, editor)
 
         decision = validated_data["decision"]
 
@@ -81,6 +90,8 @@ class EditorReviewService:
             raise ValidationError(
                 "Paper is not awaiting the editor's final review."
             )
+
+        EditorReviewService._check_assigned_editor(paper, editor)
 
         decision = validated_data["decision"]
 

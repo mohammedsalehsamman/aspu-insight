@@ -63,15 +63,7 @@ class IsReader(BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
 
-class CanManageUsers(BasePermission):
-    message = 'this action is only allowed for administrators.'
-
-    def has_permission(self, request, view):
-        return bool(
-            request.user and
-            request.user.is_authenticated and
-            request.user.role == 'admin'
-        )
+CanManageUsers = IsAdmin
 
 
 class IsEmailVerified(BasePermission):
