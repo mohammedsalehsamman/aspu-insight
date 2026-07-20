@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import IsEditor, IsAssistantEditor
 from .models import IEEECheckReport, ClaimEvidenceGraphReport
 from .serializers import (
     IEEECheckReportSerializer,
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 class IEEECheckView(APIView):
 
     parser_classes  = [MultiPartParser, FormParser]
-    permission_classes = [AllowAny]   
+    permission_classes = [IsEditor | IsAssistantEditor]
 
     def post(self, request, *args, **kwargs):
         document_file = request.FILES.get('document_file')
@@ -78,7 +79,7 @@ class IEEECheckView(APIView):
 
 
 class IEEEReportListView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsEditor | IsAssistantEditor]
 
     def get(self, request, *args, **kwargs):
         reports = IEEECheckReport.objects.all()
@@ -97,7 +98,7 @@ class IEEEReportListView(APIView):
 
 
 class IEEEReportDetailView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsEditor | IsAssistantEditor]
 
     def _get_report(self, pk):
         try:

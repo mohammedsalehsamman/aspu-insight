@@ -19,7 +19,7 @@ def extract_text_from_pdf(pdf_path: str) -> Tuple[str, int]:
     try:
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                text = page.extract_text()
+                text = page.extract_text(x_tolerance=1, y_tolerance=3)
                 if text:
                     pages_text.append(text)
         return "\n".join(pages_text), len(pages_text)
