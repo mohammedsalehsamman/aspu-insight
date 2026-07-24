@@ -208,9 +208,9 @@ AXES_RESET_ON_SUCCESS = True
 HF_HOME = str(BASE_DIR / '.hf_cache')
 os.environ.setdefault('HF_HOME', HF_HOME)
 
-CLAIM_EVIDENCE_EMBEDDING_MODEL = config('CLAIM_EVIDENCE_EMBEDDING_MODEL', default='sentence-transformers/all-MiniLM-L6-v2')
-CLAIM_EVIDENCE_ZERO_SHOT_MODEL = config('CLAIM_EVIDENCE_ZERO_SHOT_MODEL', default='valhalla/distilbart-mnli-12-3')
-CLAIM_EVIDENCE_SIMILARITY_THRESHOLD = config('CLAIM_EVIDENCE_SIMILARITY_THRESHOLD', default=0.5, cast=float)
+CLAIM_EVIDENCE_EMBEDDING_MODEL = config('CLAIM_EVIDENCE_EMBEDDING_MODEL', default='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+CLAIM_EVIDENCE_ZERO_SHOT_MODEL = config('CLAIM_EVIDENCE_ZERO_SHOT_MODEL', default='MoritzLaurer/mDeBERTa-v3-base-mnli-xnli')
+CLAIM_EVIDENCE_SIMILARITY_THRESHOLD = config('CLAIM_EVIDENCE_SIMILARITY_THRESHOLD', default=0.2, cast=float)
 CLAIM_EVIDENCE_TOP_CLAIMS_COUNT = config('CLAIM_EVIDENCE_TOP_CLAIMS_COUNT', default=10, cast=int)
 
 IEEE_CHECKER_LLM_MODEL = config('IEEE_CHECKER_LLM_MODEL', default='Qwen/Qwen2.5-1.5B-Instruct')
@@ -220,6 +220,9 @@ IEEE_CHECKER_ENABLE_SECTION_CHECK = config('IEEE_CHECKER_ENABLE_SECTION_CHECK', 
 IEEE_CHECKER_ENABLE_SEMANTIC_MATCH = config('IEEE_CHECKER_ENABLE_SEMANTIC_MATCH', default=True, cast=bool)
 IEEE_CHECKER_SEMANTIC_MISMATCH_THRESHOLD = config('IEEE_CHECKER_SEMANTIC_MISMATCH_THRESHOLD', default=0.15, cast=float)
 
+# Both analyze_claim_evidence_graph_task and analyze_ieee_check_task run synchronously
+# inside the HTTP request thread because of this flag - their pipeline speed directly
+# affects request latency.
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')

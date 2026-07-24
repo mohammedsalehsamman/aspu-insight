@@ -60,6 +60,7 @@ def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
             full_text,
             threshold=report.similarity_threshold,
             top_claims_count=report.top_claims_count,
+            language=report.detected_language,
         )
 
         if "error" in graph_result:

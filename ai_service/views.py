@@ -4,7 +4,6 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -129,7 +128,7 @@ class IEEEReportDetailView(APIView):
 class ClaimEvidenceGraphAnalyzeView(APIView):
 
     parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [AllowAny]
+    permission_classes = [IsEditor | IsAssistantEditor]
 
     def post(self, request, *args, **kwargs):
         document_file = request.FILES.get('document_file')
@@ -200,7 +199,7 @@ class ClaimEvidenceGraphAnalyzeView(APIView):
 
 
 class ClaimEvidenceGraphReportListView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsEditor | IsAssistantEditor]
 
     def get(self, request, *args, **kwargs):
         reports = ClaimEvidenceGraphReport.objects.all()
@@ -219,7 +218,7 @@ class ClaimEvidenceGraphReportListView(APIView):
 
 
 class ClaimEvidenceGraphReportDetailView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsEditor | IsAssistantEditor]
 
     def _get_report(self, pk):
         try:
@@ -227,10 +226,21 @@ class ClaimEvidenceGraphReportDetailView(APIView):
         except ClaimEvidenceGraphReport.DoesNotExist:
             return None
 
+    def _forbidden_if_not_owner(self, request, report):
+        if report.requested_by_id is None:
+            if request.user.role != 'admin':
+                return Response({"error": "غير مصرح لك بالوصول إلى هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
+        elif report.requested_by_id != request.user.id and request.user.role != 'admin':
+            return Response({"error": "غير مصرح لك بالوصول إلى هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
+        return None
+
     def get(self, request, pk, *args, **kwargs):
         report = self._get_report(pk)
         if not report:
             return Response({"error": "التقرير غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+        forbidden = self._forbidden_if_not_owner(request, report)
+        if forbidden:
+            return forbidden
         serializer = ClaimEvidenceGraphReportSerializer(report)
         return Response(serializer.data)
 
@@ -238,6 +248,9 @@ class ClaimEvidenceGraphReportDetailView(APIView):
         report = self._get_report(pk)
         if not report:
             return Response({"error": "التقرير غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+        forbidden = self._forbidden_if_not_owner(request, report)
+        if forbidden:
+            return forbidden
         try:
             if report.document_file:
                 default_storage.delete(report.document_file.name)
