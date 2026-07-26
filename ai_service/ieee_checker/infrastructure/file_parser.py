@@ -13,7 +13,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-
 def extract_text_from_pdf(pdf_path: str) -> Tuple[str, int]:
     pages_text = []
     try:
@@ -26,7 +25,6 @@ def extract_text_from_pdf(pdf_path: str) -> Tuple[str, int]:
     except Exception as e:
         logger.error("PDF extraction failed: %s", e)
         return "", 0
-
 
 def extract_text_from_docx(docx_path: str) -> Tuple[str, int]:
     if not DOCX_AVAILABLE:
@@ -47,7 +45,6 @@ def extract_text_from_docx(docx_path: str) -> Tuple[str, int]:
     except Exception as e:
         logger.error("DOCX extraction failed: %s", e)
         return "", 0
-
 
 def extract_text_from_file(file_path: str) -> Tuple[str, int, str]:
     file_ext = os.path.splitext(file_path)[1].lower()

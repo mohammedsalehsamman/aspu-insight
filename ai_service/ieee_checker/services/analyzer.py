@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 
 _MAX_FORMAT_ISSUES_SHOWN = 20
 
-
 def perform_ieee_analysis(
     file_path: str,
     verify_crossref: bool = True,

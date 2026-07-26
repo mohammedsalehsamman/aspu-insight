@@ -4,7 +4,6 @@ from research.models import ResearchPaper
 from researchHistory.models import ResearchHistory
 from assistantReview.models import AssistantReview
 
-
 class AssistantReviewService:
 
     @staticmethod
@@ -34,8 +33,11 @@ class AssistantReviewService:
 
         if decision == AssistantReview.Decision.APPROVE:
             paper.status = ResearchPaper.Status.EDITOR_REVIEW
+            paper.is_reviewed_by_assistant = True
+            paper.rejection_reason = ""
         else:
             paper.status = ResearchPaper.Status.REVISION_REQUIRED
+            paper.rejection_reason = validated_data.get("notes", "")
 
         paper.save()
 

@@ -1,14 +1,3 @@
-"""
-AI-based structured extraction of reference fields from a raw reference string.
-
-Uses the local instruction-tuned LLM (see ``infrastructure/nlp_models.py``)
-to understand a reference string written in any citation style and pull out
-its fields as JSON, instead of relying on a fixed cascade of regexes that
-only matches IEEE-shaped text exactly. Falls back to the original
-regex-based ``parse_ieee_reference`` whenever the model is unavailable, its
-output cannot be parsed as JSON, or an unexpected error occurs — the
-feature must never break just because the model failed once.
-"""
 from __future__ import annotations
 
 import json
@@ -38,10 +27,8 @@ Reference string:
 
 JSON:"""
 
-
 def _empty_result() -> Dict[str, str]:
     return {f: "" for f in _FIELDS}
-
 
 def _run_llm_extraction(ref_text: str) -> Dict[str, str]:
     model, tokenizer = get_extraction_llm()
@@ -77,9 +64,7 @@ def _run_llm_extraction(ref_text: str) -> Dict[str, str]:
         result[field_name] = str(value).strip() if value else ""
     return result
 
-
 def _ner_cross_check(ref_text: str, extracted_authors: str) -> float:
-    """Return a rough confidence (0-1) that the extracted authors match NER PER entities."""
     if not extracted_authors:
         return 0.0
     try:
@@ -87,7 +72,7 @@ def _ner_cross_check(ref_text: str, extracted_authors: str) -> float:
         entities = ner(ref_text[:400])
     except Exception as e:
         logger.warning("IEEE checker NER cross-check failed: %s", e)
-        return 0.5  # neutral confidence when NER itself is unavailable
+        return 0.5
 
     person_entities = [e['word'] for e in entities if e.get('entity_group') == 'PER']
     if not person_entities:
@@ -97,14 +82,7 @@ def _ner_cross_check(ref_text: str, extracted_authors: str) -> float:
     matches = sum(1 for name in person_entities if any(part.lower() in authors_lower for part in name.split()))
     return min(1.0, matches / max(1, len(person_entities)))
 
-
 def extract_reference_fields(ref_text: str) -> Dict[str, object]:
-    """Extract structured fields from a raw reference string using the local LLM.
-
-    Returns a dict with the same keys as ``parse_ieee_reference`` plus
-    ``extraction_method`` ("ai" or "regex_fallback") and
-    ``extraction_confidence`` (float 0-1).
-    """
     try:
         fields = _run_llm_extraction(ref_text)
         if not fields['authors'] and not fields['title']:

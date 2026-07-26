@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import FileExtensionValidator
 from rest_framework.exceptions import ValidationError
 
 from research.validators import validate_file_size
@@ -20,7 +21,7 @@ class ResearchPaper(models.Model):
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True,
-                             validators=[validate_file_size])
+                             validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf'])])
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
     is_paid_open_access = models.BooleanField(default=False)
     status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)
@@ -50,23 +51,51 @@ class ResearchPaper(models.Model):
     def str(self):
         return self.title
 
-
 class PlagiarismReport(models.Model):
+    class Status(models.TextChoices):
+        COMPLETED = 'completed', 'Completed'
+        SKIPPED   = 'skipped',   'Skipped'
+
     paper = models.OneToOneField(ResearchPaper, on_delete=models.CASCADE, related_name='plagiarism_report')
-    total_similarity_score = models.FloatField()
+    status = models.CharField(max_length=15, choices=Status.choices, default=Status.COMPLETED)
+    total_similarity_score = models.FloatField(default=0.0)
+    internal_similarity_score = models.FloatField(default=0.0)
+    external_similarity_score = models.FloatField(default=0.0)
     ai_keywords = models.JSONField(default=list, blank=True)
     checked_at = models.DateTimeField(auto_now_add=True)
 
     def str(self):
         return f"Report for {self.paper.title}"
 
-
 class PlagiarismSource(models.Model):
+    class SourceType(models.TextChoices):
+        INTERNAL = 'internal', 'Internal (platform corpus)'
+        EXTERNAL = 'external', 'External (web/academic search)'
+
     report = models.ForeignKey(PlagiarismReport, on_delete=models.CASCADE, related_name='sources')
-    source_url = models.URLField(max_length=500)
-    source_title = models.CharField(max_length=255)
+    source_type = models.CharField(max_length=10, choices=SourceType.choices, default=SourceType.EXTERNAL)
+    matched_paper = models.ForeignKey(
+        ResearchPaper, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='plagiarism_matches_as_source'
+    )
+    source_url = models.URLField(max_length=500, blank=True, default='')
+    source_title = models.CharField(max_length=255, blank=True, default='')
     match_percentage = models.FloatField()
-    matched_text_snippet = models.TextField()
+    own_text_snippet = models.TextField(default='', help_text="النص من البحث المُقدَّم الذي طابق المصدر")
+    source_text_snippet = models.TextField(blank=True, default='', help_text="النص المقابل من المصدر (بحث آخر داخلي، أو ملخص/نص خارجي)")
 
     def str(self):
-        return self.source_title
+        return self.source_title or (self.matched_paper.title if self.matched_paper else 'Unknown source')
+
+class PaperChunkEmbedding(models.Model):
+    paper = models.ForeignKey(ResearchPaper, on_delete=models.CASCADE, related_name='chunk_embeddings')
+    chunk_index = models.PositiveIntegerField()
+    chunk_text = models.TextField()
+    embedding_vector = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['chunk_index']
+
+    def str(self):
+        return f"Chunk {self.chunk_index} of {self.paper.title}"

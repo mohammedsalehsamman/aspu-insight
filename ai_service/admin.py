@@ -2,7 +2,6 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import IEEECheckReport, ClaimEvidenceGraphReport
 
-
 @admin.register(IEEECheckReport)
 class IEEECheckReportAdmin(admin.ModelAdmin):
     list_display  = [
@@ -40,7 +39,6 @@ class IEEECheckReportAdmin(admin.ModelAdmin):
         icons = {'pass': 'مقبول', 'warning': 'يحتاج تحسين', 'fail': 'يحتاج مراجعة', 'error': 'خطأ'}
         return icons.get(obj.status, obj.status)
     status_badge.short_description = 'الحالة'
-
 
 @admin.register(ClaimEvidenceGraphReport)
 class ClaimEvidenceGraphReportAdmin(admin.ModelAdmin):

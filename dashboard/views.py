@@ -25,10 +25,8 @@ from dashboard.serializers import (
     AssignEditorSerializer,
 )
 
-
 def _counts_by(queryset, field):
     return {row[field]: row['count'] for row in queryset.values(field).annotate(count=Count(field))}
-
 
 class AdminDashboardStatsView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
@@ -69,7 +67,6 @@ class AdminDashboardStatsView(APIView):
         }
         return Response(data)
 
-
 class AdminPaperListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = AdminResearchPaperSerializer
@@ -79,12 +76,10 @@ class AdminPaperListView(generics.ListAPIView):
     search_fields = ['title', 'author__full_name', 'author__email']
     ordering_fields = ['created_at', 'updated_at', 'status']
 
-
 class AdminPaperDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = AdminResearchPaperDetailSerializer
     queryset = ResearchPaper.objects.select_related('author', 'assigned_editor')
-
 
 class AdminAssignEditorView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
@@ -111,7 +106,6 @@ class AdminAssignEditorView(APIView):
         paper.save(update_fields=['assigned_editor'])
         return Response(AdminResearchPaperSerializer(paper).data)
 
-
 class AdminEditorReviewListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = EditorReviewSerializer
@@ -120,7 +114,6 @@ class AdminEditorReviewListView(generics.ListAPIView):
     filterset_fields = ['stage', 'decision', 'editor']
     ordering_fields = ['reviewed_at']
 
-
 class AdminAssistantReviewListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = AssistantReviewSerializer
@@ -128,7 +121,6 @@ class AdminAssistantReviewListView(generics.ListAPIView):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['decision', 'assistant']
     ordering_fields = ['reviewed_at']
-
 
 class AdminCommitteeListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]

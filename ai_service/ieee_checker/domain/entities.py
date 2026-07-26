@@ -2,7 +2,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
 
-
 @dataclass
 class ReferenceEntry:
     index: int
@@ -22,7 +21,6 @@ class ReferenceEntry:
     ieee_score: float = 0.0
     extraction_method: str = "regex_fallback"
     extraction_confidence: float = 0.0
-
 
 @dataclass
 class IEEECheckResult:

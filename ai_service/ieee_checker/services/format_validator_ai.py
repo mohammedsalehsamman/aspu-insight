@@ -1,14 +1,3 @@
-"""
-AI-based IEEE format compliance judgment for a single reference entry.
-
-Hybrid approach (same pattern as ``claim_evidence/services/heuristics.py`` +
-``classifier.py``): the fast rule-based checks in ``format_validator.py``
-run first to catch obviously missing fields instantly, then the local LLM
-is asked to judge the reference holistically against IEEE citation style
-rules and explain any subtler issues in natural Arabic. Falls back to the
-rule-based result alone if the model is unavailable or its output cannot
-be parsed.
-"""
 from __future__ import annotations
 
 import json
@@ -43,13 +32,7 @@ If there are no problems, return an empty errors list.
 
 JSON:"""
 
-
 def validate_ieee_format_ai(ref: ReferenceEntry) -> List[str]:
-    """Return a list of Arabic format-error strings for ``ref``.
-
-    Combines the fast rule-based checks with an LLM judgment call; falls
-    back to rule-based-only output if the model fails.
-    """
     rule_errors = validate_ieee_format(ref)
 
     try:
@@ -94,3 +77,4 @@ def validate_ieee_format_ai(ref: ReferenceEntry) -> List[str]:
     except Exception as e:
         logger.warning("AI format validation failed, using rule-based result only: %s", e)
         return rule_errors
+

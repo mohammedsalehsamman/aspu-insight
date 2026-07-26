@@ -1,16 +1,3 @@
-"""
-Lazy module-level singletons for the AI models used by the IEEE checker.
-
-Follows the same pattern as ``claim_evidence/infrastructure/nlp_models.py``:
-each model is loaded on first use and cached at module scope, so within a
-single worker process (Django dev server, gunicorn worker, or Celery
-worker) it is loaded exactly once and reused across requests/tasks.
-
-The zero-shot classifier and the sentence embedding model are NOT
-re-declared here — they are the exact same models already loaded by the
-``claim_evidence`` feature, so we import and reuse those singletons
-directly to avoid holding two copies of the same weights in memory.
-"""
 from __future__ import annotations
 
 import logging
@@ -37,13 +24,7 @@ _llm_tokenizer = None
 _ner_pipeline = None
 _lock = threading.Lock()
 
-
 def get_extraction_llm():
-    """Return a cached (model, tokenizer) pair for the reference-extraction LLM.
-
-    Loads `settings.IEEE_CHECKER_LLM_MODEL` (default
-    'Qwen/Qwen2.5-1.5B-Instruct') on first call.
-    """
     global _llm_model, _llm_tokenizer
     if _llm_model is None or _llm_tokenizer is None:
         with _lock:
@@ -64,13 +45,7 @@ def get_extraction_llm():
                 _llm_model.eval()
     return _llm_model, _llm_tokenizer
 
-
 def get_ner_pipeline():
-    """Return a cached NER pipeline used as an auxiliary cross-check on author names.
-
-    Loads `settings.IEEE_CHECKER_NER_MODEL` (default 'dslim/bert-base-NER')
-    on first call.
-    """
     global _ner_pipeline
     if _ner_pipeline is None:
         with _lock:
@@ -85,6 +60,6 @@ def get_ner_pipeline():
                     "ner",
                     model=model_name,
                     aggregation_strategy="simple",
-                    device=-1,  # force CPU
+                    device=-1,
                 )
     return _ner_pipeline

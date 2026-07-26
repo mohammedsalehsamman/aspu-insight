@@ -24,14 +24,26 @@ class ResearchPaperService:
         )
 
     @staticmethod
-    def get_visible_papers(user):
+    def _apply_search(queryset, search):
+        if not search:
+            return queryset
+        return queryset.filter(
+            Q(title__icontains=search) |
+            Q(author__full_name__icontains=search) |
+            Q(specialization__icontains=search)
+        )
+
+    @staticmethod
+    def get_visible_papers(user, search=None):
         if not user or not user.is_authenticated:
-            return ResearchPaper.objects.filter(status='approved')
+            papers = ResearchPaper.objects.filter(status=ResearchPaper.Status.PUBLISHED)
+            return ResearchPaperService._apply_search(papers, search)
 
         is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
 
         if is_assistant:
-            return ResearchPaper.objects.select_related('author').all()
+            papers = ResearchPaper.objects.select_related('author').all()
+            return ResearchPaperService._apply_search(papers, search)
 
         assigned_paper_ids = CommitteeMember.objects.filter(
             user=user
@@ -39,17 +51,18 @@ class ResearchPaperService:
 
         is_editor_role = getattr(user, 'role', '') == 'editor'
         editor_query = Q(committee__editor=user, is_reviewed_by_assistant=True)
-        
-        # الاعتماد على الفحص العكسي الذكي: إذا لم تكن هناك لجنة بعد (أي قيد الانتظار للتعيين)
+
         if is_editor_role:
             editor_query = editor_query | Q(is_reviewed_by_assistant=True, committee__isnull=True)
 
-        return ResearchPaper.objects.filter(
-            Q(status='approved') |
+        papers = ResearchPaper.objects.filter(
+            Q(status=ResearchPaper.Status.PUBLISHED) |
             Q(author=user) |
             Q(id__in=assigned_paper_ids) |
             editor_query
         ).select_related('author').distinct()
+
+        return ResearchPaperService._apply_search(papers, search)
 
     @staticmethod
     def get_author_dashboard_papers(user):
@@ -57,7 +70,7 @@ class ResearchPaperService:
 
     @staticmethod
     def can_view(user, paper):
-        if paper.status == 'approved':
+        if paper.status == ResearchPaper.Status.PUBLISHED:
             return True
 
         if not user or not user.is_authenticated:
@@ -89,7 +102,10 @@ class ResearchPaperService:
         if not committee_exists:
             return True
 
-        return paper.status in ['under_review', 'rejected']
+        return paper.status in [
+            ResearchPaper.Status.REVISION_REQUIRED,
+            ResearchPaper.Status.REJECTED,
+        ]
 
     @staticmethod
     def can_delete(user, paper):
@@ -105,10 +121,3 @@ class ResearchPaperService:
     @staticmethod
     def delete_paper(paper):
         paper.delete()
-
-    @staticmethod
-    def submit_assistant_report(paper, report_text):
-        paper.assistant_editor_report = report_text
-        paper.is_reviewed_by_assistant = True
-        paper.save()
-        return paper

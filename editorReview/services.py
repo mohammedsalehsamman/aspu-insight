@@ -4,7 +4,6 @@ from research.models import ResearchPaper
 from researchHistory.models import ResearchHistory
 from editorReview.models import EditorReview
 
-
 INITIAL_DECISIONS = {
     EditorReview.Decision.SEND_TO_COMMITTEE,
     EditorReview.Decision.REVISION_REQUIRED,
@@ -24,7 +23,6 @@ STATUS_BY_DECISION = {
     EditorReview.Decision.ACCEPT:            ResearchPaper.Status.ACCEPTED,
 }
 
-
 class EditorReviewService:
 
     @staticmethod
@@ -40,6 +38,12 @@ class EditorReviewService:
         from_status = paper.status
 
         paper.status = STATUS_BY_DECISION[review.decision]
+
+        if paper.status in (ResearchPaper.Status.REJECTED, ResearchPaper.Status.REVISION_REQUIRED):
+            paper.rejection_reason = note
+        else:
+            paper.rejection_reason = ""
+
         paper.save()
 
         ResearchHistory.objects.create(

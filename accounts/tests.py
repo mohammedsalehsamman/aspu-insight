@@ -104,7 +104,6 @@ class RegisterAPITest(APITestCase):
         user = User.objects.get(email='noroleset@example.com')
         self.assertEqual(user.role, 'author')
 
-
 class EmailVerifyAPITest(APITestCase):
 
     def setUp(self):
@@ -140,7 +139,7 @@ class EmailVerifyAPITest(APITestCase):
     def test_verify_email_used_token(self):
         raw_token = create_token_for_user(self.user, token_type='email_verify', expiry_hours=24)
         self.client.post(self.url, {'token': raw_token}, format='json')
-        # استخدام ثانٍ يجب أن يفشل
+
         response = self.client.post(self.url, {'token': raw_token}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -262,7 +261,6 @@ class ChangePasswordAPITest(APITestCase):
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-
 class PasswordResetAPITest(APITestCase):
 
     def setUp(self):
@@ -354,7 +352,6 @@ class AdminUserAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.regular_user.refresh_from_db()
         self.assertFalse(self.regular_user.is_active)
-
 
 class IsEmailVerifiedPermissionTest(TestCase):
 

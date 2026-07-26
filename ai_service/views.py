@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.files.storage import default_storage
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -19,6 +20,39 @@ from .tasks import analyze_claim_evidence_graph_task, analyze_ieee_check_task
 
 logger = logging.getLogger(__name__)
 
+class KeywordSuggestionView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        text = (request.data.get('text') or '').strip()
+        paper_id = request.data.get('paper_id')
+
+        if not text and paper_id:
+            from research.models import ResearchPaper
+            try:
+                paper = ResearchPaper.objects.get(id=paper_id)
+            except ResearchPaper.DoesNotExist:
+                return Response({"error": "البحث غير موجود."}, status=status.HTTP_404_NOT_FOUND)
+            text = f"{paper.title} {paper.abstract}".strip()
+
+        if not text:
+            return Response(
+                {"error": "يجب إرسال الحقل 'text' أو 'paper_id'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from ai_service.utils.ai_keywordExtractor import AIKeywordExtractor
+            keywords = AIKeywordExtractor().extract_pure_keywords(text, top_n=10)
+        except Exception as e:
+            logger.exception("Keyword suggestion unavailable (non-blocking): %s", e)
+            return Response(
+                {"keywords": [], "note": "خدمة اقتراح الكلمات المفتاحية غير متاحة حالياً."},
+                status=status.HTTP_200_OK,
+            )
+
+        return Response({"keywords": keywords}, status=status.HTTP_200_OK)
 
 class IEEECheckView(APIView):
 
@@ -76,7 +110,6 @@ class IEEECheckView(APIView):
         serializer = IEEECheckReportSerializer(report)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 class IEEEReportListView(APIView):
     permission_classes = [IsEditor | IsAssistantEditor]
 
@@ -94,7 +127,6 @@ class IEEEReportListView(APIView):
 
         serializer = IEEECheckReportListSerializer(reports[:50], many=True)
         return Response(serializer.data)
-
 
 class IEEEReportDetailView(APIView):
     permission_classes = [IsEditor | IsAssistantEditor]
@@ -123,7 +155,6 @@ class IEEEReportDetailView(APIView):
             pass
         report.delete()
         return Response({"message": "تم حذف التقرير بنجاح"}, status=status.HTTP_204_NO_CONTENT)
-
 
 class ClaimEvidenceGraphAnalyzeView(APIView):
 
@@ -197,7 +228,6 @@ class ClaimEvidenceGraphAnalyzeView(APIView):
         serializer = ClaimEvidenceGraphReportSerializer(report)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-
 class ClaimEvidenceGraphReportListView(APIView):
     permission_classes = [IsEditor | IsAssistantEditor]
 
@@ -215,7 +245,6 @@ class ClaimEvidenceGraphReportListView(APIView):
 
         serializer = ClaimEvidenceGraphReportListSerializer(reports[:50], many=True)
         return Response(serializer.data)
-
 
 class ClaimEvidenceGraphReportDetailView(APIView):
     permission_classes = [IsEditor | IsAssistantEditor]

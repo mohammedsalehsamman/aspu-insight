@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import IEEECheckReport, ClaimEvidenceGraphReport
 
-
 class IEEECheckReportListSerializer(serializers.ModelSerializer):
 
     status_display = serializers.SerializerMethodField()
@@ -30,7 +29,6 @@ class IEEECheckReportListSerializer(serializers.ModelSerializer):
 
     def get_status_display(self, obj) -> str:
         return obj.status_display_ar
-
 
 class IEEECheckReportSerializer(serializers.ModelSerializer):
     status_display   = serializers.SerializerMethodField()
@@ -74,7 +72,6 @@ class IEEECheckReportSerializer(serializers.ModelSerializer):
     def get_references_list(self, obj) -> list:
         return obj.references_list
 
-
 class ClaimEvidenceGraphReportListSerializer(serializers.ModelSerializer):
 
     status_display = serializers.SerializerMethodField()
@@ -100,7 +97,6 @@ class ClaimEvidenceGraphReportListSerializer(serializers.ModelSerializer):
 
     def get_status_display(self, obj) -> str:
         return obj.status_display_ar
-
 
 class ClaimEvidenceGraphReportSerializer(serializers.ModelSerializer):
 

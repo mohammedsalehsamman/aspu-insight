@@ -14,8 +14,6 @@ app.conf.update(
     }
 )
 
-# Read CELERY_* settings from Django settings.py, using the CELERY_ namespace.
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
-# Auto-discover tasks.py in each installed app.
 app.autodiscover_tasks()

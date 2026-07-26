@@ -10,7 +10,6 @@ from assistantReview.serializers import (
 )
 from assistantReview.services import AssistantReviewService
 
-
 class AssistantReviewAPIView(APIView):
 
     permission_classes = [IsAssistantEditor]

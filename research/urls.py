@@ -4,15 +4,18 @@ from .views import (
     ResearchPaperDetailAPIView,
     ResearchPaperDownloadAPIView,
     ResearchPaperPlagiarismReportView,
-    SubmitAssistantEditorReportAPIView,
+    SmartSearchAPIView,
+    SimilarPapersAPIView,
     AuthorDashboardAPIView
 )
 
 urlpatterns = [
     path('papers/', ResearchPaperListCreateAPIView.as_view(), name='paper-list-create'),
+    path('papers/smart-search/', SmartSearchAPIView.as_view(), name='paper-smart-search'),
     path('papers/<int:paper_id>/', ResearchPaperDetailAPIView.as_view(), name='paper-detail'),
     path('papers/<int:paper_id>/download/', ResearchPaperDownloadAPIView.as_view(), name='paper-download'),
     path('papers/<int:paper_id>/plagiarism-report/', ResearchPaperPlagiarismReportView.as_view(), name='paper-plagiarism-report'),
-    path('papers/<int:paper_id>/submit-assistant-report/', SubmitAssistantEditorReportAPIView.as_view(), name='submit-assistant-report'),
+    path('papers/<int:paper_id>/recommendations/', SimilarPapersAPIView.as_view(), name='paper-recommendations'),
+
     path('author/dashboard/', AuthorDashboardAPIView.as_view(), name='author-dashboard'),
 ]

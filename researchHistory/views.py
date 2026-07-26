@@ -6,7 +6,6 @@ from accounts.permissions import IsAdmin
 from researchHistory.models import ResearchHistory
 from researchHistory.serializers import ResearchHistorySerializer
 
-
 class AdminResearchHistoryListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     serializer_class = ResearchHistorySerializer

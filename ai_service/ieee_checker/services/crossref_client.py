@@ -3,7 +3,6 @@ import json
 import urllib.request
 from typing import Tuple
 
-
 def verify_doi(doi: str) -> Tuple[bool, str]:
     try:
         url = f"https://api.crossref.org/works/{doi}"

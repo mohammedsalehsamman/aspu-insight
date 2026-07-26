@@ -1,13 +1,20 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from committees.models import Committee, CommitteeMember
 from committees.utils import send_committee_expiry_email, send_substitute_invitation_email
 from research.models import ResearchPaper
-from ai_service.services.reviewer_recommendation import AIReviewerMatcherService
+
+try:
+    from ai_service.services.reviewer_recommendation import AIReviewerMatcherService
+except Exception:
+    AIReviewerMatcherService = None
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
-
 
 class CommitteeService:
 
@@ -23,12 +30,21 @@ class CommitteeService:
 
         all_reviewers = User.objects.filter(role='reviewer').exclude(user_id=paper.author_id)
 
-        ranked_reviewers = AIReviewerMatcherService.rank_reviewers_by_specialization(
-            paper_specialization=paper.specialization,
-            reviewers_queryset=all_reviewers
-        )
+        if AIReviewerMatcherService is not None:
+            try:
+                ranked_reviewers = AIReviewerMatcherService.rank_reviewers_by_specialization(
+                    paper_specialization=paper.specialization,
+                    reviewers_queryset=all_reviewers
+                )
+                if ranked_reviewers:
+                    return ranked_reviewers
+            except Exception:
+                logger.exception(
+                    "AI reviewer ranking unavailable for paper %s; falling back to unranked list.",
+                    paper_id
+                )
 
-        return ranked_reviewers
+        return list(all_reviewers)
 
     @staticmethod
     def create_committee(user, paper_id, primary_ids, substitute_ids, blinding_type):
@@ -99,8 +115,6 @@ class CommitteeService:
 
         return committee
 
-    # =====================================================
-
     @staticmethod
     def handle_reviewer_response(user, member_id, is_approved):
         if getattr(user, 'role', '') != 'reviewer':
@@ -132,13 +146,13 @@ class CommitteeService:
                 member.response = 'declined'
 
                 if previously_accepted:
-                    # إلغاء الصوت السابق إن وجد
+
                     member.paper_decision = 'pending'
-                    # إعادة اللجنة لحالة pending إذا كانت approved
+
                     if committee.status == 'approved':
                         committee.status = 'pending'
                         committee.save()
-                    # إرسال طلب للعضو الاحتياطي الأول المتاح
+
                     substitute = CommitteeMember.objects.filter(
                         committee=committee,
                         is_substitute=True,
@@ -151,14 +165,12 @@ class CommitteeService:
             elif is_approved is True:
                 member.response = 'accepted'
 
-                # إذا كان احتياطياً وقبِل → ترقيته لعضو أساسي
                 if member.is_substitute:
                     member.is_substitute = False
                     member.role = 'primary'
 
                 member.save()
 
-                # إعادة حساب عدد الموافقين الأساسيين
                 approved_count = CommitteeMember.objects.filter(
                     committee=committee,
                     is_substitute=False,
@@ -170,8 +182,6 @@ class CommitteeService:
                     committee.save()
 
         return member
-
-    # =====================================================
 
     @staticmethod
     def submit_review_decision(user, member_id, decision, comment):
@@ -227,8 +237,6 @@ class CommitteeService:
 
             committee.save()
 
-    # =====================================================
-
     @staticmethod
     def _try_force_decision(committee):
         members = CommitteeMember.objects.filter(
@@ -270,8 +278,6 @@ class CommitteeService:
                     committee.status = 'expired'
                     committee.save()
                     send_committee_expiry_email(committee)
-
-    # =====================================================
 
     @staticmethod
     def get_research_paper_details(user, paper_id):

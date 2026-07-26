@@ -43,7 +43,6 @@ _INVALID_REF_PATTERNS = [
     re.compile(r'^https?://\S+\s*$'),
 ]
 
-
 def _is_valid_reference(text: str) -> bool:
     if len(text) < 30:
         return False
@@ -54,7 +53,6 @@ def _is_valid_reference(text: str) -> bool:
         if pat.search(text):
             return False
     return bool(_YEAR_RE.search(text) or _DOI_RE.search(text) or _URL_RE.search(text))
-
 
 def find_references_section(full_text: str) -> str:
     pattern = '|'.join(_REF_SECTION_PATTERNS)
@@ -68,7 +66,6 @@ def find_references_section(full_text: str) -> str:
             section = section[:50 + end_m.start()]
             break
     return section
-
 
 def split_references_section(ref_section: str) -> List[Tuple[int, str]]:
     results: List[Tuple[int, str]] = []
@@ -89,7 +86,6 @@ def split_references_section(ref_section: str) -> List[Tuple[int, str]]:
             if _is_valid_reference(clean_text):
                 results.append((ref_num, clean_text))
     return results
-
 
 def parse_ieee_reference(ref_text: str) -> Dict[str, str]:
     result = {
@@ -133,7 +129,7 @@ def parse_ieee_reference(ref_text: str) -> Dict[str, str]:
         authors_part = text[:text.find(result['title'])].strip().rstrip(',"')
         result['authors'] = re.sub(r'\s+', ' ', authors_part).strip()
     else:
-        # Pattern 1: IEEE style — F. Lastname
+
         auth_m = re.match(
             r'^([A-Z]\.\s+[A-Z][a-zA-Z\-]+(?:(?:,\s*|,?\s+and\s+)[A-Z]\.\s+[A-Z][a-zA-Z\-]+)*'
             r'(?:,?\s*et al\.?)?)',
@@ -142,7 +138,7 @@ def parse_ieee_reference(ref_text: str) -> Dict[str, str]:
         if auth_m:
             result['authors'] = auth_m.group(1).strip()
         else:
-            # Pattern 2: NeurIPS/arXiv style — Firstname Lastname
+
             name_m = re.match(
                 r'^([A-Z][a-z]+(?:\s[A-Z][a-zA-Z\-]+)+'
                 r'(?:(?:,\s*|,?\s+and\s+)[A-Z][a-z]+(?:\s[A-Z][a-zA-Z\-]+)+)*'

@@ -4,7 +4,6 @@ from accounts.models import User
 from accounts.serializers import UserListSerializer
 from assistantReview.models import AssistantReview
 
-
 class AssistantReviewSerializer(serializers.ModelSerializer):
 
     assistant = UserListSerializer(read_only=True)
@@ -28,7 +27,6 @@ class AssistantReviewSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
-
 
 class AssistantReviewCreateSerializer(serializers.ModelSerializer):
 

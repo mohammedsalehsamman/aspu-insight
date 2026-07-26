@@ -4,7 +4,6 @@ from django.utils.translation import gettext_lazy as _
 
 from .models import User, PasswordResetToken
 
-
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     list_display = ['email', 'full_name', 'role', 'is_active', 'email_verified', 'created_at']
@@ -28,7 +27,6 @@ class UserAdmin(BaseUserAdmin):
     )
 
     ordering = ['-created_at']
-
 
 @admin.register(PasswordResetToken)
 class PasswordResetTokenAdmin(admin.ModelAdmin):

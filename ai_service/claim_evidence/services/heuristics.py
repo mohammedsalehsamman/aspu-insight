@@ -1,16 +1,3 @@
-"""
-Rule-based cue-phrase heuristics for classifying scientific-paper sentences
-as Claim, Evidence, or Neutral.
-
-These heuristics are intentionally lightweight (string matching + a couple
-of regexes) and act as a fast pre-signal that is combined with the
-zero-shot model in `classifier.classify_sentence`. Both English and Arabic
-cue-phrase lists are checked unconditionally on every sentence (no
-language branching) - this is deliberately simpler than routing by the
-document's coarsely-detected language, and it's strictly more robust for
-the common case of academic papers that mix Arabic prose with English
-technical terms/citations.
-"""
 from __future__ import annotations
 
 import re
@@ -52,19 +39,7 @@ _TABLE_FIGURE_RE = re.compile(r'\b(table|figure|fig\.)\s*\d+\b', re.IGNORECASE)
 _NUMERIC_RE_AR = re.compile(r'[\d٠-٩]+([.,][\d٠-٩]+)?\s*(%|٪|بالمئة|بالمائة)')
 _TABLE_FIGURE_RE_AR = re.compile(r'(الجدول|الشكل)\s*[\d٠-٩]+')
 
-
 def score_sentence_heuristic(sentence: str) -> tuple[str, float]:
-    """Return (label, confidence_boost) based on cue-phrase / numeric heuristics.
-
-    Args:
-        sentence: The sentence to score.
-
-    Returns:
-        A tuple `(label, confidence_boost)` where `label` is one of
-        "claim", "evidence", "neutral", and `confidence_boost` is in
-        [0.0, 0.3] - the amount to add to the zero-shot score for the
-        matching label (see `classifier.classify_sentence`).
-    """
     text_lower = sentence.lower()
 
     evidence_score = sum(1 for cue in EVIDENCE_CUES + EVIDENCE_CUES_AR if cue in text_lower)

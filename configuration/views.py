@@ -6,7 +6,6 @@ from accounts.permissions import IsAdmin
 from configuration.models import JournalConfiguration
 from configuration.serializers import JournalConfigurationSerializer
 
-
 class AdminJournalConfigurationView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 

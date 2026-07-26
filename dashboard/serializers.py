@@ -4,7 +4,6 @@ from accounts.serializers import UserListSerializer
 from research.models import ResearchPaper
 from researchHistory.serializers import ResearchHistorySerializer
 
-
 class AdminResearchPaperSerializer(serializers.ModelSerializer):
 
     author = UserListSerializer(read_only=True)
@@ -20,7 +19,6 @@ class AdminResearchPaperSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-
 class AdminResearchPaperDetailSerializer(AdminResearchPaperSerializer):
 
     history = serializers.SerializerMethodField()
@@ -31,7 +29,6 @@ class AdminResearchPaperDetailSerializer(AdminResearchPaperSerializer):
     def get_history(self, obj):
         history = obj.history.select_related('changed_by').order_by('-created_at')[:10]
         return ResearchHistorySerializer(history, many=True).data
-
 
 class AssignEditorSerializer(serializers.Serializer):
     editor_id = serializers.IntegerField(allow_null=True, required=True)

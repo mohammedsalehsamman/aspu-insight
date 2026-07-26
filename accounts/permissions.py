@@ -1,6 +1,5 @@
 from rest_framework.permissions import BasePermission
 
-
 class IsAdmin(BasePermission):
     message = ' this action is only allowed for administrators.'
 
@@ -10,7 +9,6 @@ class IsAdmin(BasePermission):
             request.user.is_authenticated and
             request.user.role == 'admin'
         )
-
 
 class IsEditor(BasePermission):
     message = 'this action is only allowed for editors.'
@@ -22,7 +20,6 @@ class IsEditor(BasePermission):
             request.user.role in ['editor', 'admin']
         )
 
-
 class IsAssistantEditor(BasePermission):
     message = 'this action is only allowed for assistant editors.'
 
@@ -32,7 +29,6 @@ class IsAssistantEditor(BasePermission):
             request.user.is_authenticated and
             request.user.role in ['assistant_editor', 'admin']
         )
-
 
 class IsReviewer(BasePermission):
     message = 'this action is only allowed for reviewers.'
@@ -44,7 +40,6 @@ class IsReviewer(BasePermission):
             request.user.role in ['reviewer', 'assistant_editor', 'admin']
         )
 
-
 class IsAuthor(BasePermission):
     message = 'this action is only allowed for authors.'
 
@@ -55,16 +50,13 @@ class IsAuthor(BasePermission):
             request.user.role in ['author', 'admin']
         )
 
-
 class IsReader(BasePermission):
     message = 'this action is only allowed for readers.'
 
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)
 
-
 CanManageUsers = IsAdmin
-
 
 class IsEmailVerified(BasePermission):
     message = 'this action is only allowed for verified email users.'
@@ -75,7 +67,6 @@ class IsEmailVerified(BasePermission):
             request.user.is_authenticated and
             request.user.email_verified
         )
-
 
 class IsOwnerOrAdmin(BasePermission):
     message = 'this action is only allowed for the owner or administrators.'

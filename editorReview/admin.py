@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from editorReview.models import EditorReview
 
-
 @admin.register(EditorReview)
 class EditorReviewAdmin(admin.ModelAdmin):
     list_display = [

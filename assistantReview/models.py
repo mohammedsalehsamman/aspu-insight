@@ -3,7 +3,6 @@ from research.models import ResearchPaper
 from django.conf import settings
 from ai_service.models import IEEECheckReport
 
-
 class AssistantReview(models.Model):
 
     class Decision(models.TextChoices):

@@ -12,7 +12,6 @@ from editorReview.serializers import (
 )
 from editorReview.services import EditorReviewService
 
-
 class EditorInitialReviewAPIView(APIView):
 
     permission_classes = [IsEditor]
@@ -52,7 +51,6 @@ class EditorInitialReviewAPIView(APIView):
             EditorReviewSerializer(review).data,
             status=status.HTTP_201_CREATED
         )
-
 
 class EditorFinalReviewAPIView(APIView):
 
@@ -94,7 +92,6 @@ class EditorFinalReviewAPIView(APIView):
             status=status.HTTP_201_CREATED
         )
 
-
 class PublishPaperAPIView(APIView):
 
     permission_classes = [IsEditor]
@@ -110,7 +107,7 @@ class PublishPaperAPIView(APIView):
 
         return Response(
             {
-                "research_id": paper.research_id,
+                "id": paper.id,
                 "status": paper.status,
             }
         )

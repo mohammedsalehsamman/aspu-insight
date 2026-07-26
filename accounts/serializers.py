@@ -4,7 +4,6 @@ from rest_framework import serializers
 
 from .models import User, PasswordResetToken
 
-
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -16,7 +15,6 @@ class UserSerializer(serializers.ModelSerializer):
             'specialization'
         ]
         read_only_fields = ['user_id', 'email', 'created_at', 'updated_at', 'last_login']
-
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
@@ -75,7 +73,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         return user
 
-
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True)
@@ -96,7 +93,6 @@ class LoginSerializer(serializers.Serializer):
             'user': user,
         }
 
-
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -106,7 +102,6 @@ class ProfileSerializer(serializers.ModelSerializer):
             'email', 'role', 'specialization', 'email_verified', 'created_at', 'updated_at',
         ]
         read_only_fields = ['user_id', 'email', 'role', 'email_verified', 'created_at', 'updated_at']
-
 
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(write_only=True)
@@ -130,13 +125,11 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.save()
         return user
 
-
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
         return value.lower()
-
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     token = serializers.CharField()
@@ -148,10 +141,8 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
             raise serializers.ValidationError({'new_password': 'كلمتا المرور غير متطابقتين.'})
         return attrs
 
-
 class EmailVerifySerializer(serializers.Serializer):
     token = serializers.CharField()
-
 
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -161,7 +152,6 @@ class UserListSerializer(serializers.ModelSerializer):
             'institution', 'is_active', 'specialization', 'email_verified',
             'created_at', 'last_login'
         ]
-
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:

@@ -4,15 +4,35 @@ import time
 from celery import shared_task
 from pypdf import PdfReader
 from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
-from .services.analyzer import PlagiarismAnalyzer
-from .claim_evidence.services.graph_builder import extract_graph
-from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
-from .ieee_checker.services.analyzer import perform_ieee_analysis
-from .ieee_checker.infrastructure.file_parser import extract_text_from_file
 from .models import ClaimEvidenceGraphReport, IEEECheckReport
 from researchHistory.services import log_status_change
 
 logger = logging.getLogger(__name__)
+
+try:
+    from .plagiarism.services.internal_similarity import store_chunk_embeddings, find_internal_matches
+    from .plagiarism.services.external_sources import run_external_check
+    from .utils.ai_keywordExtractor import AIKeywordExtractor
+except Exception:
+    logger.exception("Plagiarism detection services unavailable; plagiarism checks will be skipped.")
+    store_chunk_embeddings = None
+    find_internal_matches = None
+    run_external_check = None
+    AIKeywordExtractor = None
+
+try:
+    from .claim_evidence.services.graph_builder import extract_graph
+except Exception:
+    logger.exception("Claim-Evidence graph builder unavailable.")
+    extract_graph = None
+
+try:
+    from .ieee_checker.services.citation_extractor import detect_language, extract_paper_title
+    from .ieee_checker.services.analyzer import perform_ieee_analysis
+    from .ieee_checker.infrastructure.file_parser import extract_text_from_file
+except Exception:
+    logger.exception("IEEE checker services unavailable.")
+    detect_language = extract_paper_title = perform_ieee_analysis = extract_text_from_file = None
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     raw_text = ""
@@ -98,7 +118,6 @@ def analyze_claim_evidence_graph_task(self, report_id: int) -> dict:
         report.save(update_fields=["status", "error_message", "processing_time_seconds"])
         return {"status": "failed", "report_id": report_id, "error": str(e)}
 
-
 @shared_task(bind=True)
 def analyze_ieee_check_task(self, report_id: int) -> dict:
     try:
@@ -148,56 +167,97 @@ def analyze_ieee_check_task(self, report_id: int) -> dict:
         report.save(update_fields=["status", "summary", "processing_time_seconds"])
         return {"status": "failed", "report_id": report_id, "error": str(e)}
 
-
 @shared_task(bind=True)
 def check_paper_plagiarism_task(self, paper_id: int) -> dict:
-    paper = None
+
     try:
         paper = ResearchPaper.objects.get(id=paper_id)
-        from_status = paper.status
-        paper.status = 'checking_plagiarism'
-        paper.save(update_fields=["status"])
-        log_status_change(paper, from_status, paper.status, note="Automated plagiarism check started")
+    except ResearchPaper.DoesNotExist:
+        logger.error("ResearchPaper %s not found for plagiarism check", paper_id)
+        return {"status": "failed", "paper_id": paper_id, "error": "paper not found"}
 
-        raw_text = ""
-        if paper.pdf_file:
-            raw_text = extract_text_from_pdf(paper.pdf_file.path)
+    from_status = paper.status
+    paper.status = ResearchPaper.Status.CHECKING_PLAGIARISM
+    paper.save(update_fields=["status"])
+    log_status_change(paper, from_status, paper.status, note="Automated plagiarism check started")
 
-        if not raw_text.strip():
-            raw_text = paper.abstract
+    raw_text = ""
+    if paper.pdf_file:
+        raw_text = extract_text_from_pdf(paper.pdf_file.path)
+    if not raw_text.strip():
+        raw_text = paper.abstract
 
-        # استدعاء المحلل الذكي ومعالجة القطع المتتالية
-        analyzer = PlagiarismAnalyzer(api_key="YOUR_ACTUAL_API_KEY", chunk_size=30)
-        report_data = analyzer.calculate_similarity(raw_text)
+    ai_keywords = []
+    if AIKeywordExtractor is not None:
+        try:
+            ai_keywords = AIKeywordExtractor().extract_pure_keywords(raw_text, top_n=8)
+        except Exception:
+            logger.exception("Keyword extraction failed during plagiarism check for paper %s (non-blocking)", paper_id)
 
-        # حفظ التقرير الرئيسي وحفظ الكلمات المفتاحية الذكية
-        report = PlagiarismReport.objects.create(
-            paper=paper,
-            total_similarity_score=report_data['total_score'],
-            ai_keywords=report_data.get('ai_tags', [])
+    internal_matches = []
+    external_matches = []
+    ai_error = None
+    chunks, vectors = [], None
+
+    if store_chunk_embeddings is None or find_internal_matches is None or run_external_check is None:
+        ai_error = "Plagiarism detection services are not available."
+    else:
+        try:
+            chunks, vectors = store_chunk_embeddings(paper, raw_text)
+            internal_matches = find_internal_matches(paper, chunks, vectors)
+        except Exception as e:
+            ai_error = str(e)
+            logger.exception("Internal plagiarism check failed for paper %s (non-blocking): %s", paper_id, e)
+
+        try:
+            external_matches = run_external_check(chunks, vectors, ai_keywords)
+        except Exception as e:
+            ai_error = ai_error or str(e)
+            logger.exception("External plagiarism check failed for paper %s (non-blocking): %s", paper_id, e)
+
+    internal_score = max([m["score"] for m in internal_matches], default=0.0) * 100
+    external_score = max([m["score"] for m in external_matches], default=0.0) * 100
+    total_score = max(internal_score, external_score)
+
+    PlagiarismReport.objects.filter(paper=paper).delete()
+    report = PlagiarismReport.objects.create(
+        paper=paper,
+        status=PlagiarismReport.Status.SKIPPED if (not internal_matches and not external_matches and ai_error) else PlagiarismReport.Status.COMPLETED,
+        total_similarity_score=total_score,
+        internal_similarity_score=internal_score,
+        external_similarity_score=external_score,
+        ai_keywords=ai_keywords,
+    )
+
+    for match in internal_matches:
+        PlagiarismSource.objects.create(
+            report=report,
+            source_type=PlagiarismSource.SourceType.INTERNAL,
+            matched_paper=match["matched_paper"],
+            source_title=match["matched_paper"].title,
+            match_percentage=match["score"] * 100,
+            own_text_snippet=match["own_snippet"],
+            source_text_snippet=match["source_snippet"],
         )
 
-        # حفظ المصادر المقتبسة من الويب بدقة
-        for src in report_data['sources']:
-            PlagiarismSource.objects.create(
-                report=report,
-                source_url=src['url'],
-                source_title=src['title'],
-                match_percentage=src['match_percentage'],
-                matched_text_snippet=src['snippet']
-            )
+    for match in external_matches:
+        PlagiarismSource.objects.create(
+            report=report,
+            source_type=PlagiarismSource.SourceType.EXTERNAL,
+            source_url=match["source_url"],
+            source_title=match["source_title"],
+            match_percentage=match["score"] * 100,
+            own_text_snippet=match["own_snippet"],
+            source_text_snippet=match["source_snippet"],
+        )
 
-        from_status = paper.status
-        paper.status = 'editor_review'
-        paper.save(update_fields=["status"])
-        log_status_change(paper, from_status, paper.status, note="Plagiarism check passed")
-        return {"status": paper.status, "paper_id": paper_id}
-
-    except Exception as e:
-        logger.exception("Plagiarism check failed for paper %s: %s", paper_id, e)
-        if paper:
-            from_status = paper.status
-            paper.status = 'plagiarism_failed'
-            paper.save(update_fields=["status"])
-            log_status_change(paper, from_status, paper.status, note=f"Plagiarism check error: {e}")
-        return {"status": "failed", "paper_id": paper_id, "error": str(e)}
+    from_status = paper.status
+    paper.status = ResearchPaper.Status.SUBMITTED
+    paper.save(update_fields=["status"])
+    note = (
+        "Plagiarism check completed"
+        if ai_error is None
+        else f"Plagiarism AI check unavailable, proceeding without it: {ai_error}"
+    )
+    log_status_change(paper, from_status, paper.status, note=note)
+    return {"status": paper.status, "paper_id": paper_id, "ai_check_ok": ai_error is None}

@@ -11,7 +11,6 @@ _SKIP_TITLE_PATTERNS = [
     re.compile(r'^\s*Copyright|^All rights reserved', re.IGNORECASE),
 ]
 
-
 def detect_language(text: str) -> str:
     arabic_chars = len(re.findall(r'[؀-ۿ]', text))
     latin_chars = len(re.findall(r'[a-zA-Z]', text))
@@ -24,7 +23,6 @@ def detect_language(text: str) -> str:
     if ar_ratio < 0.2:
         return "en"
     return "mixed"
-
 
 def extract_paper_title(full_text: str) -> str:
     lines = [line.strip() for line in full_text.split('\n') if line.strip()]
@@ -44,7 +42,6 @@ def extract_paper_title(full_text: str) -> str:
         if len(line) > 8:
             return line
     return lines[0] if lines else ""
-
 
 def extract_in_text_citations(full_text: str) -> Dict[int, int]:
     citation_counts: Dict[int, int] = {}

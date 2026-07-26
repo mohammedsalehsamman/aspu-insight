@@ -1,7 +1,6 @@
 from django.core.mail import send_mail
 from django.conf import settings
 
-
 def send_committee_expiry_email(committee):
     editor = committee.editor
     paper = committee.paper
@@ -23,7 +22,6 @@ def send_committee_expiry_email(committee):
         recipient_list=[editor.email],
         fail_silently=True,
     )
-
 
 def send_substitute_invitation_email(member):
     reviewer = member.user

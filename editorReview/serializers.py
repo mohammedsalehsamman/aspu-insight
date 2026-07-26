@@ -3,7 +3,6 @@ from rest_framework import serializers
 from accounts.serializers import UserListSerializer
 from editorReview.models import EditorReview
 
-
 class EditorReviewSerializer(serializers.ModelSerializer):
 
     editor = UserListSerializer(read_only=True)
@@ -25,7 +24,6 @@ class EditorReviewSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = fields
-
 
 class EditorInitialReviewSerializer(serializers.ModelSerializer):
 
@@ -51,7 +49,6 @@ class EditorInitialReviewSerializer(serializers.ModelSerializer):
             )
 
         return value
-
 
 class EditorFinalReviewSerializer(serializers.ModelSerializer):
 

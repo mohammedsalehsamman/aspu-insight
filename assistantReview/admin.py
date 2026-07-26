@@ -2,7 +2,6 @@ from django.contrib import admin
 
 from assistantReview.models import AssistantReview
 
-
 @admin.register(AssistantReview)
 class AssistantReviewAdmin(admin.ModelAdmin):
     list_display = [

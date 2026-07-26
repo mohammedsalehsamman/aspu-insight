@@ -9,12 +9,11 @@ from rest_framework_simplejwt.tokens import RefreshToken, Token
 from rest_framework_simplejwt.exceptions import TokenError
 from datetime import timedelta
 
-
 class PreAuthToken(Token):
     token_type = 'pre_auth'
     lifetime = timedelta(minutes=5)
 from django_filters.rest_framework import DjangoFilterBackend
-import pyotp  # مكتبة توليد وفحص رموز المصادقة الثنائية
+import pyotp
 
 from .models import User, PasswordResetToken
 from .permissions import CanManageUsers, IsEmailVerified
@@ -25,7 +24,6 @@ from .serializers import (
     UserListSerializer, UserSerializer, UserUpdateSerializer,
 )
 from .utils import create_token_for_user, verify_token, send_email_verification, send_password_reset_email
-
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
@@ -48,7 +46,6 @@ class RegisterView(APIView):
             }, status=status.HTTP_201_CREATED)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
@@ -75,7 +72,6 @@ class VerifyEmailView(APIView):
         token_obj.save(update_fields=['is_used'])
 
         return Response({'message': 'تم تأكيد بريدك الإلكتروني بنجاح. يمكنك الآن تسجيل الدخول.'})
-
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
@@ -104,7 +100,6 @@ class LoginView(APIView):
             })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -118,7 +113,6 @@ class LogoutView(APIView):
             return Response({'message': 'تم تسجيل الخروج بنجاح.'})
         except TokenError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 
 class Verify2FAView(APIView):
     permission_classes = [AllowAny]
@@ -162,7 +156,6 @@ class Verify2FAView(APIView):
             'user': UserSerializer(user).data,
         })
 
-
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
@@ -183,7 +176,6 @@ class ProfileView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -193,7 +185,6 @@ class ChangePasswordView(APIView):
             serializer.save()
             return Response({'message': 'تم تغيير كلمة المرور بنجاح.'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
@@ -213,7 +204,6 @@ class PasswordResetRequestView(APIView):
                 'message': 'إذا كان البريد الإلكتروني مسجلاً، ستتلقى رسالة لإعادة تعيين كلمة المرور.'
             })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
@@ -241,7 +231,6 @@ class PasswordResetConfirmView(APIView):
 
         return Response({'message': 'تم إعادة تعيين كلمة المرور بنجاح. يمكنك الآن تسجيل الدخول.'})
 
-
 class AdminUserListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, CanManageUsers]
     serializer_class = UserListSerializer
@@ -250,7 +239,6 @@ class AdminUserListView(generics.ListAPIView):
     filterset_fields = ['role', 'is_active', 'email_verified']
     search_fields = ['full_name', 'email', 'institution']
     ordering_fields = ['created_at', 'full_name', 'role']
-
 
 class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, CanManageUsers]
@@ -271,7 +259,6 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
             status=status.HTTP_200_OK
         )
 
-
 class AdminVerifyEmailView(APIView):
     permission_classes = [IsAuthenticated, CanManageUsers]
 
@@ -288,7 +275,6 @@ class AdminVerifyEmailView(APIView):
         user.save(update_fields=['email_verified'])
 
         return Response({'message': f'تم تأكيد بريد {user.email} بنجاح.'})
-
 
 class AdminResendVerificationView(APIView):
     permission_classes = [IsAuthenticated, CanManageUsers]
@@ -307,9 +293,6 @@ class AdminResendVerificationView(APIView):
 
         return Response({'message': f'تم إرسال بريد التأكيد إلى {user.email}.'})
 
-
-
-
 class Enable2FAView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -318,10 +301,8 @@ class Enable2FAView(APIView):
         if user.two_factor_secret:
             return Response({'message': 'المصادقة الثنائية مفعلة بالفعل لهذا الحساب.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # توليد المفتاح السري المؤقت وحفظه
         user.generate_2fa_secret()
         
-        # إنشاء رابط الـ TOTP القياسي الذي يُحوّل إلى QR Code في الـ Front-end
         totp = pyotp.TOTP(user.two_factor_secret)
         provisioning_url = totp.provisioning_uri(name=user.email, issuer_name="ASPU Journal System")
         
@@ -330,7 +311,6 @@ class Enable2FAView(APIView):
             'qr_code_url': provisioning_url,
             'message': 'تم توليد مفتاح الربط. يرجى مسحه باستخدام تطبيق التحقق.'
         }, status=status.HTTP_200_OK)
-
 
 class Confirm2FAView(APIView):
     permission_classes = [IsAuthenticated]
@@ -344,7 +324,7 @@ class Confirm2FAView(APIView):
             
         if user.verify_otp(otp_code):
             return Response({'message': 'تم تفعيل المصادقة الثنائية بنجاح وحسابك أصبح محمياً الآن.'}, status=status.HTTP_200_OK)
-    # إذا كان الكود التجريبي خاطئاً، نحذف المفتاح المؤقت لكي لا يعلق الحساب
+
         user.two_factor_secret = None
         user.save(update_fields=['two_factor_secret'])
         return Response({'error': 'رمز التحقق التجريبي غير صحيح، فشلت عملية الربط.'}, status=status.HTTP_400_BAD_REQUEST)

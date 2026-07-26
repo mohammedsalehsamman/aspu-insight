@@ -13,7 +13,6 @@ _PENALTY_MAP = {
     "صفحات": 5,
 }
 
-
 def validate_ieee_format(ref: ReferenceEntry) -> List[str]:
     errors: List[str] = []
 
@@ -43,7 +42,6 @@ def validate_ieee_format(ref: ReferenceEntry) -> List[str]:
 
     return errors
 
-
 def compute_ieee_score(format_errors: List[str]) -> float:
     penalty = 0
     for err in format_errors:
@@ -54,7 +52,6 @@ def compute_ieee_score(format_errors: List[str]) -> float:
         else:
             penalty += 10
     return max(0.0, 100.0 - penalty)
-
 
 def calculate_scores(result: IEEECheckResult) -> IEEECheckResult:
     total_cited = len(result.citations_in_text)
@@ -102,7 +99,6 @@ def calculate_scores(result: IEEECheckResult) -> IEEECheckResult:
         result.status = "fail"
 
     return result
-
 
 def generate_recommendations(result: IEEECheckResult) -> List[str]:
     recs: List[str] = []
@@ -152,7 +148,6 @@ def generate_recommendations(result: IEEECheckResult) -> List[str]:
         recs.append("ممتاز! لا توجد مشكلات جوهرية في الاستشهادات والمراجع.")
 
     return recs
-
 
 def generate_summary(result: IEEECheckResult) -> str:
     status_ar = {

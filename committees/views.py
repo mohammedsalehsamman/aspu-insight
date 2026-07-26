@@ -2,8 +2,10 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied, NotFound
 from .services import CommitteeService
-from .serializers import CommitteeMemberUserSerializer
+from .serializers import CommitteeMemberUserSerializer, CommitteeDetailsSerializer
+from .models import Committee
 
 class CreateCommitteeAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -22,7 +24,6 @@ class CreateCommitteeAPIView(APIView):
         )
         return Response({"detail": "تم إنشاء اللجنة وإرسال الطلبات بنجاح."}, status=status.HTTP_201_CREATED)
 
-
 class ReviewerResponseAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -35,7 +36,6 @@ class ReviewerResponseAPIView(APIView):
             is_approved=is_approved
         )
         return Response({"detail": "تم تسجيل ردك بنجاح وتحديث حالة اللجنة."}, status=status.HTTP_200_OK)
-
 
 class SubmitReviewDecisionAPIView(APIView):
     permission_classes = [IsAuthenticated]
@@ -52,7 +52,6 @@ class SubmitReviewDecisionAPIView(APIView):
         )
         return Response({"detail": "تم إرسال قرارك العلمي وحفظه بنجاح."}, status=status.HTTP_200_OK)
 
-
 class FetchResearchPaperDetailsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -63,7 +62,6 @@ class FetchResearchPaperDetailsAPIView(APIView):
         )
         return Response(response_data, status=status.HTTP_200_OK)
 
-
 class GetAvailableReviewersAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -73,4 +71,22 @@ class GetAvailableReviewersAPIView(APIView):
             paper_id=paper_id
         )
         serializer = CommitteeMemberUserSerializer(reviewers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CommitteeDetailAPIView(APIView):
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, paper_id):
+        user = request.user
+        try:
+            committee = Committee.objects.select_related('editor', 'paper', 'paper__author').get(paper_id=paper_id)
+        except Committee.DoesNotExist:
+            raise NotFound("لا توجد لجنة تحكيم لهذا البحث.")
+
+        is_member = committee.committee_assigned_members.filter(user=user).exists()
+        if not (user.is_staff or committee.editor_id == getattr(user, 'user_id', None) or is_member):
+            raise PermissionDenied("غير مصرح لك بعرض تفاصيل هذه اللجنة.")
+
+        serializer = CommitteeDetailsSerializer(committee, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)

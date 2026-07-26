@@ -7,14 +7,11 @@ from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 
-
 def generate_secure_token():
     return secrets.token_urlsafe(64)
 
-
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
-
 
 def create_token_for_user(user, token_type: str, expiry_hours: int = 24):
     from .models import PasswordResetToken
@@ -37,7 +34,6 @@ def create_token_for_user(user, token_type: str, expiry_hours: int = 24):
 
     return raw_token
 
-
 def verify_token(raw_token: str, token_type: str):
     from .models import PasswordResetToken
 
@@ -53,7 +49,6 @@ def verify_token(raw_token: str, token_type: str):
         return None
     except PasswordResetToken.DoesNotExist:
         return None
-
 
 def send_email_verification(user, raw_token: str):
     frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
@@ -109,7 +104,6 @@ def send_email_verification(user, raw_token: str):
         html_message=html_message,
         fail_silently=False,
     )
-
 
 def send_password_reset_email(user, raw_token: str):
     frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')

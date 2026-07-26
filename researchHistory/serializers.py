@@ -3,7 +3,6 @@ from rest_framework import serializers
 from accounts.serializers import UserListSerializer
 from researchHistory.models import ResearchHistory
 
-
 class ResearchHistorySerializer(serializers.ModelSerializer):
 
     changed_by = UserListSerializer(read_only=True)

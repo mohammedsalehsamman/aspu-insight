@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    KeywordSuggestionView,
     IEEECheckView,
     IEEEReportListView,
     IEEEReportDetailView,
@@ -11,6 +12,8 @@ from .views import (
 app_name = 'ai_service'
 
 urlpatterns = [
+    path('keywords/suggest/', KeywordSuggestionView.as_view(), name='keyword-suggest'),
+
     path('ieee/check/', IEEECheckView.as_view(), name='ieee-check'),
     path('ieee/reports/', IEEEReportListView.as_view(), name='ieee-report-list'),
     path('ieee/reports/<int:pk>/', IEEEReportDetailView.as_view(), name='ieee-report-detail'),

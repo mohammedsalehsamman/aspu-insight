@@ -1,7 +1,6 @@
 from django.db import models
 from django.conf import settings
 
-
 class IEEECheckReport(models.Model):
 
     class Status(models.TextChoices):
@@ -76,7 +75,6 @@ class IEEECheckReport(models.Model):
     @property
     def references_list(self) -> list:
         return self.full_result.get('references', [])
-
 
 class ClaimEvidenceGraphReport(models.Model):
 

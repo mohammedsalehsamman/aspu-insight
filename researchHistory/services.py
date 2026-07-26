@@ -1,6 +1,5 @@
 from researchHistory.models import ResearchHistory
 
-
 def log_status_change(paper, from_status, to_status, changed_by=None, note=""):
     if from_status == to_status:
         return None
