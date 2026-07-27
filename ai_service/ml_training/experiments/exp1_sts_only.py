@@ -5,7 +5,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import pandas as pd
 import torch
-from datasets import Dataset, DatasetDict, concatenate_datasets
+from datasets import Dataset, concatenate_datasets
 from sentence_transformers import (
     SentenceTransformer,
     SentenceTransformerTrainer,
@@ -15,13 +15,12 @@ from sentence_transformers import (
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
 BASE_MODEL = os.path.join(
-    os.path.dirname(__file__), "..", "ml_models", "paraphrase-multilingual-MiniLM-L12-v2-base"
+    os.path.dirname(__file__), "..", "..", "ml_models", "paraphrase-multilingual-MiniLM-L12-v2-base"
 )
 OUTPUT_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "ml_models", "plagiarism-embedder-finetuned"
+    os.path.dirname(__file__), "..", "..", "ml_models", "experiments", "exp1-sts-only"
 )
 DATA_DIR = r"C:\Users\hp\Desktop\plagiarism-training-data"
-ARABIC_PAIR_SAMPLE_SIZE = 10000
 
 
 def load_scored_csv(filename, scale=1.0):
@@ -32,17 +31,6 @@ def load_scored_csv(filename, scale=1.0):
         "sentence1": df["sentence1"].tolist(),
         "sentence2": df["sentence2"].tolist(),
         "label": labels,
-    })
-def load_arabic_nli_pairs(sample_size=ARABIC_PAIR_SAMPLE_SIZE):
-    path = os.path.join(DATA_DIR, "arabic_nli_pair_train.csv")
-    if not os.path.exists(path):
-        return None
-    df = pd.read_csv(path)
-    if len(df) > sample_size:
-        df = df.sample(n=sample_size, random_state=42)
-    return Dataset.from_dict({
-        "anchor": df["anchor"].tolist(),
-        "positive": df["positive"].tolist(),
     })
 
 
@@ -68,10 +56,10 @@ def main():
 
     sts17_ar = load_scored_csv("sts17_ar_ar_test.csv", scale=5.0)
 
-    ar_pairs = load_arabic_nli_pairs()
-
-    sts_scored_train = concatenate_datasets([ar_train, en_train]).shuffle(seed=42)
+    train_dataset = concatenate_datasets([ar_train, en_train]).shuffle(seed=42)
     dev_dataset = concatenate_datasets([ar_dev, en_dev])
+
+    print(f"EXPERIMENT 1: STS-only, no Arabic-NLi-Pair. Train rows/epoch: {len(train_dataset)}")
 
     model = SentenceTransformer(BASE_MODEL)
 
@@ -80,17 +68,7 @@ def main():
     print("  ar Spearman (Arabic-STSb):", build_evaluator(ar_test, "arabic-stsb-test")(model))
     print("  ar Spearman (STS17 ar-ar):", build_evaluator(sts17_ar, "sts17-ar-ar-test")(model))
 
-    train_dataset = {"sts_scored": sts_scored_train}
-    loss = {"sts_scored": losses.CosineSimilarityLoss(model=model)}
-    if ar_pairs is not None:
-        train_dataset["ar_pairs"] = ar_pairs
-        loss["ar_pairs"] = losses.MultipleNegativesRankingLoss(model=model)
-        print(f"Using Arabic-NLi-Pair sample: {len(ar_pairs)} rows (extra loss objective)")
-    else:
-        print("arabic_nli_pair_train.csv not found in", DATA_DIR, "- training on STS-scored data only")
-
-    train_dataset = DatasetDict(train_dataset)
-    eval_dataset = DatasetDict({"sts_scored": dev_dataset})
+    loss = losses.CosineSimilarityLoss(model=model)
 
     args = SentenceTransformerTrainingArguments(
         output_dir=OUTPUT_DIR + "-checkpoints",
@@ -109,7 +87,7 @@ def main():
         model=model,
         args=args,
         train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        eval_dataset=dev_dataset,
         loss=loss,
         evaluator=build_evaluator(dev_dataset, "dev"),
     )
@@ -121,7 +99,7 @@ def main():
     print("  ar Spearman (STS17 ar-ar):", build_evaluator(sts17_ar, "sts17-ar-ar-test")(model))
 
     model.save(OUTPUT_DIR)
-    print("Saved fine-tuned model to", OUTPUT_DIR)
+    print("Saved experiment 1 model to", OUTPUT_DIR)
 
 
 if __name__ == "__main__":

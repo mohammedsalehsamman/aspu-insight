@@ -5,7 +5,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import pandas as pd
 import torch
-from datasets import Dataset, DatasetDict, concatenate_datasets
+from datasets import Dataset, concatenate_datasets
 from sentence_transformers import (
     SentenceTransformer,
     SentenceTransformerTrainer,
@@ -14,14 +14,14 @@ from sentence_transformers import (
 )
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator
 
-BASE_MODEL = os.path.join(
-    os.path.dirname(__file__), "..", "ml_models", "paraphrase-multilingual-MiniLM-L12-v2-base"
-)
-OUTPUT_DIR = os.path.join(
+CURRENT_MODEL = os.path.join(
     os.path.dirname(__file__), "..", "ml_models", "plagiarism-embedder-finetuned"
 )
+OUTPUT_DIR = os.path.join(
+    os.path.dirname(__file__), "..", "ml_models", "plagiarism-embedder-finetuned-corrected"
+)
 DATA_DIR = r"C:\Users\hp\Desktop\plagiarism-training-data"
-ARABIC_PAIR_SAMPLE_SIZE = 10000
+ENGLISH_REPEATS = 3
 
 
 def load_scored_csv(filename, scale=1.0):
@@ -32,17 +32,6 @@ def load_scored_csv(filename, scale=1.0):
         "sentence1": df["sentence1"].tolist(),
         "sentence2": df["sentence2"].tolist(),
         "label": labels,
-    })
-def load_arabic_nli_pairs(sample_size=ARABIC_PAIR_SAMPLE_SIZE):
-    path = os.path.join(DATA_DIR, "arabic_nli_pair_train.csv")
-    if not os.path.exists(path):
-        return None
-    df = pd.read_csv(path)
-    if len(df) > sample_size:
-        df = df.sample(n=sample_size, random_state=42)
-    return Dataset.from_dict({
-        "anchor": df["anchor"].tolist(),
-        "positive": df["positive"].tolist(),
     })
 
 
@@ -68,34 +57,26 @@ def main():
 
     sts17_ar = load_scored_csv("sts17_ar_ar_test.csv", scale=5.0)
 
-    ar_pairs = load_arabic_nli_pairs()
-
-    sts_scored_train = concatenate_datasets([ar_train, en_train]).shuffle(seed=42)
+    train_dataset = concatenate_datasets([en_train] * ENGLISH_REPEATS + [ar_train]).shuffle(seed=42)
     dev_dataset = concatenate_datasets([ar_dev, en_dev])
 
-    model = SentenceTransformer(BASE_MODEL)
+    print(f"Corrective round: en_train x{ENGLISH_REPEATS} ({len(en_train) * ENGLISH_REPEATS} rows) "
+          f"+ ar_train x1 ({len(ar_train)} rows) = {len(train_dataset)} total rows/epoch")
+    print("Continuing training from:", CURRENT_MODEL)
 
-    print("Baseline (before fine-tuning):")
+    model = SentenceTransformer(CURRENT_MODEL)
+
+    print("Baseline (current fine-tuned model, before correction):")
     print("  en Spearman:", build_evaluator(en_test, "stsb-en-test")(model))
     print("  ar Spearman (Arabic-STSb):", build_evaluator(ar_test, "arabic-stsb-test")(model))
     print("  ar Spearman (STS17 ar-ar):", build_evaluator(sts17_ar, "sts17-ar-ar-test")(model))
 
-    train_dataset = {"sts_scored": sts_scored_train}
-    loss = {"sts_scored": losses.CosineSimilarityLoss(model=model)}
-    if ar_pairs is not None:
-        train_dataset["ar_pairs"] = ar_pairs
-        loss["ar_pairs"] = losses.MultipleNegativesRankingLoss(model=model)
-        print(f"Using Arabic-NLi-Pair sample: {len(ar_pairs)} rows (extra loss objective)")
-    else:
-        print("arabic_nli_pair_train.csv not found in", DATA_DIR, "- training on STS-scored data only")
-
-    train_dataset = DatasetDict(train_dataset)
-    eval_dataset = DatasetDict({"sts_scored": dev_dataset})
+    loss = losses.CosineSimilarityLoss(model=model)
 
     args = SentenceTransformerTrainingArguments(
         output_dir=OUTPUT_DIR + "-checkpoints",
         num_train_epochs=2,
-        learning_rate=3e-5,
+        learning_rate=2e-5,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
         warmup_ratio=0.1,
@@ -109,19 +90,19 @@ def main():
         model=model,
         args=args,
         train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        eval_dataset=dev_dataset,
         loss=loss,
         evaluator=build_evaluator(dev_dataset, "dev"),
     )
     trainer.train()
 
-    print("After fine-tuning:")
+    print("After corrective round:")
     print("  en Spearman:", build_evaluator(en_test, "stsb-en-test")(model))
     print("  ar Spearman (Arabic-STSb):", build_evaluator(ar_test, "arabic-stsb-test")(model))
     print("  ar Spearman (STS17 ar-ar):", build_evaluator(sts17_ar, "sts17-ar-ar-test")(model))
 
     model.save(OUTPUT_DIR)
-    print("Saved fine-tuned model to", OUTPUT_DIR)
+    print("Saved corrected model to", OUTPUT_DIR)
 
 
 if __name__ == "__main__":
