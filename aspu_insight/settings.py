@@ -192,7 +192,7 @@ KEYWORD_EXTRACTOR_MODEL = config('KEYWORD_EXTRACTOR_MODEL', default=str(BASE_DIR
 
 PLAGIARISM_EMBEDDING_MODEL = config(
     'PLAGIARISM_EMBEDDING_MODEL',
-    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'plagiarism-embedder-finetuned')
+    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'experiments' / 'exp8-domain-specific')
 )
 # النموذج الأساس غير المُضبَط دقيقاً — يُستخدَم لأي مقارنة عابرة للغات (عربي↔غير عربي) أو خارجية،
 # لأن PLAGIARISM_EMBEDDING_MODEL المُضبَط دقيقاً أُحسِّن للعربية تحديداً وضعُف أداؤه الإنجليزي.
