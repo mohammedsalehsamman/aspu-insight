@@ -173,7 +173,10 @@ AXES_RESET_ON_SUCCESS = True
 HF_HOME = str(BASE_DIR / '.hf_cache')
 os.environ.setdefault('HF_HOME', HF_HOME)
 
-CLAIM_EVIDENCE_EMBEDDING_MODEL = config('CLAIM_EVIDENCE_EMBEDDING_MODEL', default='sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+CLAIM_EVIDENCE_EMBEDDING_MODEL = config(
+    'CLAIM_EVIDENCE_EMBEDDING_MODEL',
+    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'paraphrase-multilingual-MiniLM-L12-v2-base')
+)
 CLAIM_EVIDENCE_ZERO_SHOT_MODEL = config('CLAIM_EVIDENCE_ZERO_SHOT_MODEL', default='MoritzLaurer/mDeBERTa-v3-base-mnli-xnli')
 CLAIM_EVIDENCE_SIMILARITY_THRESHOLD = config('CLAIM_EVIDENCE_SIMILARITY_THRESHOLD', default=0.2, cast=float)
 CLAIM_EVIDENCE_TOP_CLAIMS_COUNT = config('CLAIM_EVIDENCE_TOP_CLAIMS_COUNT', default=10, cast=int)
@@ -190,6 +193,12 @@ KEYWORD_EXTRACTOR_MODEL = config('KEYWORD_EXTRACTOR_MODEL', default=str(BASE_DIR
 PLAGIARISM_EMBEDDING_MODEL = config(
     'PLAGIARISM_EMBEDDING_MODEL',
     default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'plagiarism-embedder-finetuned')
+)
+# النموذج الأساس غير المُضبَط دقيقاً — يُستخدَم لأي مقارنة عابرة للغات (عربي↔غير عربي) أو خارجية،
+# لأن PLAGIARISM_EMBEDDING_MODEL المُضبَط دقيقاً أُحسِّن للعربية تحديداً وضعُف أداؤه الإنجليزي.
+PLAGIARISM_BASE_EMBEDDING_MODEL = config(
+    'PLAGIARISM_BASE_EMBEDDING_MODEL',
+    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'paraphrase-multilingual-MiniLM-L12-v2-base')
 )
 PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD = config('PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD', default=0.75, cast=float)
 PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD = config('PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD', default=0.6, cast=float)

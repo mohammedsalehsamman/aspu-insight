@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 
 def _embedding_model():
-    return get_embedding_model(settings.PLAGIARISM_EMBEDDING_MODEL)
+    # الموديل الأساس دوماً هنا (وليس المُضبَط دقيقاً للعربية) لأن المقارنة الخارجية
+    # عابرة للغات بطبيعتها (بحث قد يكون عربياً مقابل مصادر إنجليزية غالباً).
+    return get_embedding_model(settings.PLAGIARISM_BASE_EMBEDDING_MODEL)
 
 
 def _best_match_against_chunks(chunks, vectors, candidate_text, source_excerpt_len=800):

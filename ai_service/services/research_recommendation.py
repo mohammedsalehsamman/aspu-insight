@@ -1,5 +1,7 @@
 import logging
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.2
@@ -7,6 +9,24 @@ SIMILARITY_THRESHOLD = 0.2
 def _paper_text(paper):
     parts = [paper.title or "", paper.abstract or "", paper.specialization or ""]
     return " ".join(p.strip() for p in parts if p and p.strip())
+
+
+def _vectors_for_papers(papers, model):
+    from research.models import PaperEmbedding
+
+    precomputed = {
+        row.paper_id: np.asarray(row.embedding_vector)
+        for row in PaperEmbedding.objects.filter(paper__in=papers)
+    }
+
+    missing = [p for p in papers if p.id not in precomputed]
+    if missing:
+        fresh_vectors = model.encode([_paper_text(p) for p in missing])
+        for paper, vector in zip(missing, fresh_vectors):
+            precomputed[paper.id] = np.asarray(vector)
+
+    return np.array([precomputed[p.id] for p in papers])
+
 
 class AIPaperSearchService:
 
@@ -22,9 +42,8 @@ class AIPaperSearchService:
             from ai_service.utils.embeddings import get_embedding_model
 
             model = get_embedding_model()
-            texts = [_paper_text(p) for p in papers]
             query_vector = model.encode([query_text])
-            paper_vectors = model.encode(texts)
+            paper_vectors = _vectors_for_papers(papers, model)
             scores = cosine_similarity(query_vector, paper_vectors).flatten()
         except Exception:
             logger.exception("Semantic search embedding unavailable; falling back to plain text matching.")
@@ -39,14 +58,14 @@ class AIPaperSearchService:
         candidates = [p for p in candidates_queryset if p.id != paper.id]
         if not candidates:
             return []
-        
+
         try:
             from sklearn.metrics.pairwise import cosine_similarity
             from ai_service.utils.embeddings import get_embedding_model
 
             model = get_embedding_model()
-            target_vector = model.encode([_paper_text(paper)])
-            candidate_vectors = model.encode([_paper_text(p) for p in candidates])
+            target_vector = _vectors_for_papers([paper], model)
+            candidate_vectors = _vectors_for_papers(candidates, model)
             scores = cosine_similarity(target_vector, candidate_vectors).flatten()
         except Exception:
             logger.exception("Recommendation embedding unavailable; falling back to same-specialization match.")

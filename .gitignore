@@ -227,3 +227,7 @@ media
 # Hugging Face model cache (Claim-to-Evidence Graph)
 .hf_cache/
 my-model/
+
+# Trained/downloaded embedding model weights (large binaries) — regenerated via
+# ai_service/ml_training/ scripts, never committed. Training reports/logs are tracked instead.
+ai_service/ml_models/

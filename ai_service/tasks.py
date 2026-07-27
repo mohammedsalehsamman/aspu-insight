@@ -3,7 +3,7 @@ import logging
 import time
 from celery import shared_task
 from pypdf import PdfReader
-from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
+from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource, PaperEmbedding
 from .models import ClaimEvidenceGraphReport, IEEECheckReport
 from researchHistory.services import log_status_change
 
@@ -19,6 +19,14 @@ except Exception:
     find_internal_matches = None
     run_external_check = None
     AIKeywordExtractor = None
+
+try:
+    from .utils.embeddings import get_embedding_model
+    from .services.research_recommendation import _paper_text
+except Exception:
+    logger.exception("Paper embedding precomputation unavailable; search/recommendations will fall back to live encoding.")
+    get_embedding_model = None
+    _paper_text = None
 
 try:
     from .claim_evidence.services.graph_builder import extract_graph
@@ -197,20 +205,20 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
     internal_matches = []
     external_matches = []
     ai_error = None
-    chunks, vectors = [], None
+    chunks, base_vectors = [], None
 
     if store_chunk_embeddings is None or find_internal_matches is None or run_external_check is None:
         ai_error = "Plagiarism detection services are not available."
     else:
         try:
-            chunks, vectors = store_chunk_embeddings(paper, raw_text)
-            internal_matches = find_internal_matches(paper, chunks, vectors)
+            chunks, finetuned_vectors, base_vectors, language = store_chunk_embeddings(paper, raw_text)
+            internal_matches = find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, language)
         except Exception as e:
             ai_error = str(e)
             logger.exception("Internal plagiarism check failed for paper %s (non-blocking): %s", paper_id, e)
 
         try:
-            external_matches = run_external_check(chunks, vectors, ai_keywords)
+            external_matches = run_external_check(chunks, base_vectors, ai_keywords)
         except Exception as e:
             ai_error = ai_error or str(e)
             logger.exception("External plagiarism check failed for paper %s (non-blocking): %s", paper_id, e)
@@ -261,3 +269,28 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
     )
     log_status_change(paper, from_status, paper.status, note=note)
     return {"status": paper.status, "paper_id": paper_id, "ai_check_ok": ai_error is None}
+
+@shared_task(bind=True)
+def compute_paper_embedding_task(self, paper_id: int) -> dict:
+    try:
+        paper = ResearchPaper.objects.get(id=paper_id)
+    except ResearchPaper.DoesNotExist:
+        logger.error("ResearchPaper %s not found for embedding computation", paper_id)
+        return {"status": "failed", "paper_id": paper_id, "error": "paper not found"}
+
+    if get_embedding_model is None or _paper_text is None:
+        logger.warning("Embedding model unavailable; skipping paper embedding computation for paper %s", paper_id)
+        return {"status": "skipped", "paper_id": paper_id}
+
+    try:
+        model = get_embedding_model()
+        vector = model.encode([_paper_text(paper)])[0]
+        PaperEmbedding.objects.update_or_create(
+            paper=paper,
+            defaults={"embedding_vector": vector.tolist()},
+        )
+    except Exception as e:
+        logger.exception("Paper embedding computation failed for paper %s (non-blocking): %s", paper_id, e)
+        return {"status": "failed", "paper_id": paper_id, "error": str(e)}
+
+    return {"status": "completed", "paper_id": paper_id}

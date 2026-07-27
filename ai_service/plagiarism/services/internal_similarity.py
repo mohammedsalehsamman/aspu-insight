@@ -3,11 +3,16 @@ from django.conf import settings
 from sklearn.metrics.pairwise import cosine_similarity
 
 from ai_service.utils.embeddings import get_embedding_model
+from ai_service.ieee_checker.services.citation_extractor import detect_language
 from .chunking import chunk_text
 
 
-def _embedding_model():
+def _finetuned_model():
     return get_embedding_model(settings.PLAGIARISM_EMBEDDING_MODEL)
+
+
+def _base_model():
+    return get_embedding_model(settings.PLAGIARISM_BASE_EMBEDDING_MODEL)
 
 
 def store_chunk_embeddings(paper, raw_text):
@@ -16,27 +21,30 @@ def store_chunk_embeddings(paper, raw_text):
     chunks = chunk_text(raw_text)
     PaperChunkEmbedding.objects.filter(paper=paper).delete()
     if not chunks:
-        return [], None
+        return [], None, None, "unknown"
 
-    model = _embedding_model()
-    vectors = model.encode(chunks)
+    language = detect_language(raw_text)
+    finetuned_vectors = _finetuned_model().encode(chunks)
+    base_vectors = _base_model().encode(chunks)
 
     PaperChunkEmbedding.objects.bulk_create([
         PaperChunkEmbedding(
             paper=paper,
             chunk_index=index,
             chunk_text=chunk,
-            embedding_vector=np.asarray(vector).tolist(),
+            embedding_vector=np.asarray(ft_vector).tolist(),
+            base_embedding_vector=np.asarray(base_vector).tolist(),
+            detected_language=language,
         )
-        for index, (chunk, vector) in enumerate(zip(chunks, vectors))
+        for index, (chunk, ft_vector, base_vector) in enumerate(zip(chunks, finetuned_vectors, base_vectors))
     ])
-    return chunks, vectors
+    return chunks, finetuned_vectors, base_vectors, language
 
 
-def find_internal_matches(paper, chunks, vectors):
+def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, language):
     from research.models import PaperChunkEmbedding
 
-    if vectors is None or len(chunks) == 0:
+    if finetuned_vectors is None or len(chunks) == 0:
         return []
 
     threshold = getattr(settings, 'PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD', 0.75)
@@ -54,8 +62,28 @@ def find_internal_matches(paper, chunks, vectors):
 
     matches = []
     for bucket in by_paper.values():
-        other_vectors = np.array([r.embedding_vector for r in bucket["rows"]])
-        scores = cosine_similarity(vectors, other_vectors)
+        rows = bucket["rows"]
+        other_language = rows[0].detected_language
+
+        # مقارنة عربي-عربي تستخدم الموديل المُضبَط دقيقاً (الأفضل هنا)؛ أي مقارنة عابرة
+        # للغات (أو لغة غير مكتشَفة) تستخدم الموديل الأساس المشترك، لأن المقارنة بين متجهين
+        # من موديلين مختلفين غير صحيحة رياضياً (فضاءان مختلفان تماماً).
+        if language == "ar" and other_language == "ar":
+            own_vectors = finetuned_vectors
+            usable_rows = [r for r in rows if r.embedding_vector is not None]
+            other_vectors = [r.embedding_vector for r in usable_rows]
+        else:
+            own_vectors = base_vectors
+            usable_rows = [r for r in rows if r.base_embedding_vector is not None]
+            other_vectors = [r.base_embedding_vector for r in usable_rows]
+
+        if not other_vectors:
+            # بحث آخر لم تُحسَب له بعد المتجهات اللازمة لهذه المقارنة تحديداً (بيانات قديمة
+            # قبل إضافة هذا الحقل، أو لم يُعالَج بعد) — يُتجاوَز بأمان بدل الانهيار.
+            continue
+
+        other_vectors = np.array(other_vectors)
+        scores = cosine_similarity(own_vectors, other_vectors)
         best_index = np.unravel_index(np.argmax(scores), scores.shape)
         best_score = float(scores[best_index])
         if best_score >= threshold:
@@ -63,7 +91,7 @@ def find_internal_matches(paper, chunks, vectors):
                 "matched_paper": bucket["paper"],
                 "score": best_score,
                 "own_snippet": chunks[best_index[0]],
-                "source_snippet": bucket["rows"][best_index[1]].chunk_text,
+                "source_snippet": usable_rows[best_index[1]].chunk_text,
             })
 
     matches.sort(key=lambda m: m["score"], reverse=True)
@@ -71,5 +99,5 @@ def find_internal_matches(paper, chunks, vectors):
 
 
 def run_internal_check(paper, raw_text):
-    chunks, vectors = store_chunk_embeddings(paper, raw_text)
-    return find_internal_matches(paper, chunks, vectors)
+    chunks, finetuned_vectors, base_vectors, language = store_chunk_embeddings(paper, raw_text)
+    return find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, language)

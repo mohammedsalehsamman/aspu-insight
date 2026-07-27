@@ -91,7 +91,12 @@ class PaperChunkEmbedding(models.Model):
     paper = models.ForeignKey(ResearchPaper, on_delete=models.CASCADE, related_name='chunk_embeddings')
     chunk_index = models.PositiveIntegerField()
     chunk_text = models.TextField()
-    embedding_vector = models.JSONField()
+    embedding_vector = models.JSONField(help_text="متجه النموذج المُضبَط دقيقاً (الأفضل للعربي-عربي)")
+    base_embedding_vector = models.JSONField(
+        null=True, blank=True,
+        help_text="متجه النموذج الأساس (للمقارنات العابرة للغات، عربي↔غير عربي)"
+    )
+    detected_language = models.CharField(max_length=10, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -99,3 +104,11 @@ class PaperChunkEmbedding(models.Model):
 
     def str(self):
         return f"Chunk {self.chunk_index} of {self.paper.title}"
+
+class PaperEmbedding(models.Model):
+    paper = models.OneToOneField(ResearchPaper, on_delete=models.CASCADE, related_name='embedding')
+    embedding_vector = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def str(self):
+        return f"Embedding for {self.paper.title}"
