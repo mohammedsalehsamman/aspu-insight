@@ -212,6 +212,12 @@ PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD = config('PLAGIARISM_EXTERNAL_SIMILARIT
 # حساب قبول نسبة أعلى من الإنذارات الكاذبة على أزواج غير مرتبطة أصلاً — مقبول لأنها للمراجعة لا للحكم.
 PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD = config('PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD', default=0.25, cast=float)
 PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD = config('PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD', default=0.25, cast=float)
+# تصحيح لمشكلة المقارنات المتعددة (multiple comparisons): أخذ أعلى تشابه واحد فقط عبر عشرات مقاطع
+# ورقتين كاملتين إحصائياً عرضة لتطابق عشوائي معزول (تأكَّد تجريبياً: 53-67% من عمليات فحص أوراق
+# غير مرتبطة إطلاقاً أعطت "تأكيد" خاطئ واحداً على الأقل). لذلك "التأكيد" الآن يتطلب أدلة داعمة من
+# أكثر من مقطع مستقل، لا مطابقة واحدة معزولة مهما علت قيمتها.
+PLAGIARISM_CORROBORATION_THRESHOLD = config('PLAGIARISM_CORROBORATION_THRESHOLD', default=0.50, cast=float)
+PLAGIARISM_MIN_CORROBORATING_CHUNKS = config('PLAGIARISM_MIN_CORROBORATING_CHUNKS', default=2, cast=int)
 PLAGIARISM_CHUNK_SENTENCES = config('PLAGIARISM_CHUNK_SENTENCES', default=4, cast=int)
 PLAGIARISM_CHUNK_OVERLAP = config('PLAGIARISM_CHUNK_OVERLAP', default=1, cast=int)
 VALUESERP_API_KEY = config('VALUESERP_API_KEY', default='')

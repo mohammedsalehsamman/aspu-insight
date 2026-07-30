@@ -49,6 +49,8 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
 
     threshold = getattr(settings, 'PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD', 0.75)
     suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD', 0.30)
+    corroboration_threshold = getattr(settings, 'PLAGIARISM_CORROBORATION_THRESHOLD', 0.50)
+    min_corroborating_chunks = getattr(settings, 'PLAGIARISM_MIN_CORROBORATING_CHUNKS', 2)
 
     others = (
         PaperChunkEmbedding.objects
@@ -88,10 +90,23 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
         best_index = np.unravel_index(np.argmax(scores), scores.shape)
         best_score = float(scores[best_index])
         if best_score >= suspected_threshold:
+            # مطابقة واحدة معزولة بين عشرات مقاطع ورقتين كاملتين قد تحدث صدفة (مفردات أكاديمية
+            # مشتركة بنفس التخصص) حتى لو كانت الورقتان غير مرتبطتين إطلاقاً — تأكَّد هذا تجريبياً
+            # (دراسة rigor_gap_coverage_study.py). لذلك "التأكيد" يتطلب دليلاً داعماً من أكثر من
+            # مقطع مستقل يطابق نفس الورقة الأخرى، لا أعلى قيمة واحدة فقط مهما علت — إلا إذا كانت
+            # الورقة نفسها قصيرة جداً (أقل من الحد الأدنى من المقاطع) فلا معنى لطلب تعدد الأدلة.
+            if len(own_vectors) < min_corroborating_chunks:
+                corroborating_chunks = 1 if best_score >= threshold else 0
+                is_confirmed = best_score >= threshold
+            else:
+                row_best = scores.max(axis=1)
+                corroborating_chunks = int((row_best >= corroboration_threshold).sum())
+                is_confirmed = best_score >= threshold and corroborating_chunks >= min_corroborating_chunks
             matches.append({
                 "matched_paper": bucket["paper"],
                 "score": best_score,
-                "confidence_level": "confirmed" if best_score >= threshold else "suspected",
+                "confidence_level": "confirmed" if is_confirmed else "suspected",
+                "corroborating_chunks": corroborating_chunks,
                 "own_snippet": chunks[best_index[0]],
                 "source_snippet": usable_rows[best_index[1]].chunk_text,
             })
