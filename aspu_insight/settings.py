@@ -218,6 +218,21 @@ PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD = config('PLAGIARISM_SUSPECTED_EXTERNAL_
 # أكثر من مقطع مستقل، لا مطابقة واحدة معزولة مهما علت قيمتها.
 PLAGIARISM_CORROBORATION_THRESHOLD = config('PLAGIARISM_CORROBORATION_THRESHOLD', default=0.50, cast=float)
 PLAGIARISM_MIN_CORROBORATING_CHUNKS = config('PLAGIARISM_MIN_CORROBORATING_CHUNKS', default=2, cast=int)
+# ترجيح عكسي بتكرار العبارة (شبيه بفكرة IDF): مقطع يتشابه بشدة مع عدد كبير من مقاطع أخرى عبر
+# مكتبة مرجعية (وليس فقط مع الورقة الأخرى قيد المقارنة) هو على الأرجح أسلوب أكاديمي شائع/صيغة
+# متكرّرة، لا دليلاً خاصاً على النسخ بين ورقتين تحديداً — يُخفَّض تلقائياً لمستوى "مشتبه به".
+# المكتبة المرجعية طبقتان: ملف ثابت (bootstrap) لأول انطلاقة للمجلة قبل توفر بيانات حقيقية كافية،
+# بالإضافة لمقاطع كل الأبحاث الأخرى المُخزَّنة فعلياً في المنصة (تنمو تلقائياً مع كل بحث جديد).
+PLAGIARISM_COMMONNESS_REFERENCE_PATH = config(
+    'PLAGIARISM_COMMONNESS_REFERENCE_PATH',
+    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'commonness_reference_arpd.npy')
+)
+# تحذير: 0.60/5 كانت القيمة الأولى المُختبَرة، وتبيَّن أنها كارثية عملياً (تُسقِط اكتشاف انتحال
+# حقيقي فعلي من 100% إلى 6% فقط — راجع check_commonness_recall_impact.py). حتى 0.92 لا تزال تُسقِط
+# الاسترجاع لنحو 67-77%. 0.97 هي أدنى قيمة رُصِد عندها استرجاع 99-100% على 865 زوجاً حقيقياً على
+# كلا النموذجين — لا تُخفَّض دون إعادة اختبار الأثر على عيّنة انتحال حقيقية معروفة أولاً.
+PLAGIARISM_COMMONNESS_THRESHOLD = config('PLAGIARISM_COMMONNESS_THRESHOLD', default=0.97, cast=float)
+PLAGIARISM_COMMONNESS_MAX_COUNT = config('PLAGIARISM_COMMONNESS_MAX_COUNT', default=5, cast=int)
 PLAGIARISM_CHUNK_SENTENCES = config('PLAGIARISM_CHUNK_SENTENCES', default=4, cast=int)
 PLAGIARISM_CHUNK_OVERLAP = config('PLAGIARISM_CHUNK_OVERLAP', default=1, cast=int)
 VALUESERP_API_KEY = config('VALUESERP_API_KEY', default='')

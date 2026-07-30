@@ -1,3 +1,6 @@
+import os
+from functools import lru_cache
+
 import numpy as np
 from django.conf import settings
 from sklearn.metrics.pairwise import cosine_similarity
@@ -5,6 +8,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from ai_service.utils.embeddings import get_embedding_model
 from ai_service.ieee_checker.services.citation_extractor import detect_language
 from .chunking import chunk_text, is_citation_chunk
+from .section_extractor import extract_core_sections
 
 
 def _finetuned_model():
@@ -15,10 +19,32 @@ def _base_model():
     return get_embedding_model(settings.PLAGIARISM_BASE_EMBEDDING_MODEL)
 
 
+@lru_cache(maxsize=1)
+def _bootstrap_commonness_reference():
+    """ملف ثابت مبني مسبقاً من ARPD (انظر build_commonness_reference.py) — يمنح ميزة الترجيح
+    العكسي بيانات تعمل عليها منذ أول انطلاقة للمجلة قبل توفر عدد كافٍ من أبحاثها الحقيقية."""
+    path = getattr(settings, 'PLAGIARISM_COMMONNESS_REFERENCE_PATH', '')
+    if not path or not os.path.exists(path):
+        return np.zeros((0, 384), dtype=np.float32)
+    return np.load(path)
+
+
+def _commonness_count(vector, reference_vectors, threshold):
+    if reference_vectors is None or len(reference_vectors) == 0:
+        return 0
+    sims = cosine_similarity(np.asarray(vector).reshape(1, -1), reference_vectors)[0]
+    return int((sims >= threshold).sum())
+
+
 def store_chunk_embeddings(paper, raw_text):
     from research.models import PaperChunkEmbedding
 
-    chunks = chunk_text(raw_text)
+    # اقتصار المقارنة الداخلية على جوهر البحث العلمي فقط (الملخص، النتائج، المنهجية/الخوارزميات
+    # المستخدَمة) لا النص الكامل — تأكَّد تجريبياً أن مقارنة النص الكامل (بما فيه الإهداء والشكر
+    # والمقدمات العامة) تُنتج تطابقات كاذبة مرتفعة جداً حتى بين أوراق حقيقية مستقلة تماماً لا
+    # علاقة بينها إطلاقاً (محاسبة مقابل طب، 96.5% "مؤكَّد" في اختبار فعلي).
+    core_text = extract_core_sections(raw_text)
+    chunks = chunk_text(core_text)
     PaperChunkEmbedding.objects.filter(paper=paper).delete()
     if not chunks:
         return [], None, None, "unknown"
@@ -52,6 +78,8 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
     suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD', 0.30)
     corroboration_threshold = getattr(settings, 'PLAGIARISM_CORROBORATION_THRESHOLD', 0.50)
     min_corroborating_chunks = getattr(settings, 'PLAGIARISM_MIN_CORROBORATING_CHUNKS', 2)
+    commonness_threshold = getattr(settings, 'PLAGIARISM_COMMONNESS_THRESHOLD', 0.60)
+    commonness_max_count = getattr(settings, 'PLAGIARISM_COMMONNESS_MAX_COUNT', 5)
 
     # اقتباس مُصرَّح به (علامات تنصيص + إشارة استشهاد) ليس انتحالاً — نصوص مرجعية مشتركة (نصوص
     # دينية/كلاسيكية، مواد قانونية، تعريفات طبية معيارية) يقتبسها أكثر من بحث مستقل بشكل مشروع
@@ -65,12 +93,19 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
     finetuned_vectors = np.array(finetuned_vectors)[own_indices]
     base_vectors = np.array(base_vectors)[own_indices]
 
-    others = (
+    others = list(
         PaperChunkEmbedding.objects
         .exclude(paper_id=paper.id)
         .exclude(is_citation=True)
         .select_related('paper')
     )
+
+    # مكتبة "الترجيح العكسي" الحيّة: كل مقاطع كل الأبحاث الأخرى المُخزَّنة فعلياً في المنصة، مجمَّعة
+    # بلا تقسيم حسب الورقة — تُستخدَم لقياس مدى شيوع صياغة مقطع مُعيَّن عبر المكتبة كاملة، لا فقط
+    # مع الورقة المُقارَنة تحديداً. تنمو تلقائياً مع كل بحث جديد يُرفَع، بلا حاجة لإعادة بناء يدوي.
+    live_finetuned_pool = np.array([r.embedding_vector for r in others if r.embedding_vector is not None])
+    live_base_pool = np.array([r.base_embedding_vector for r in others if r.base_embedding_vector is not None])
+    bootstrap_pool = _bootstrap_commonness_reference()
 
     by_paper = {}
     for row in others:
@@ -89,10 +124,16 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
             own_vectors = finetuned_vectors
             usable_rows = [r for r in rows if r.embedding_vector is not None]
             other_vectors = [r.embedding_vector for r in usable_rows]
+            commonness_pool = (
+                np.concatenate([bootstrap_pool, live_finetuned_pool])
+                if len(bootstrap_pool) and len(live_finetuned_pool)
+                else (bootstrap_pool if len(bootstrap_pool) else live_finetuned_pool)
+            )
         else:
             own_vectors = base_vectors
             usable_rows = [r for r in rows if r.base_embedding_vector is not None]
             other_vectors = [r.base_embedding_vector for r in usable_rows]
+            commonness_pool = live_base_pool  # لا يوجد ملف مرجعي ثابت للموديل الأساس بعد
 
         if not other_vectors:
             # بحث آخر لم تُحسَب له بعد المتجهات اللازمة لهذه المقارنة تحديداً (بيانات قديمة
@@ -116,6 +157,14 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
                 row_best = scores.max(axis=1)
                 corroborating_chunks = int((row_best >= corroboration_threshold).sum())
                 is_confirmed = best_score >= threshold and corroborating_chunks >= min_corroborating_chunks
+
+            # ترجيح عكسي بتكرار العبارة: مقطعنا الأفضل تطابقاً هنا قد يكون صياغة أكاديمية شائعة
+            # عبر مكتبة كاملة (لا خاصة بهاتين الورقتين تحديداً) — إن كان كذلك، لا يُعتبَر دليلاً
+            # كافياً للتأكيد مهما علت درجته مع هذه الورقة بالذات.
+            commonness = _commonness_count(own_vectors[best_index[0]], commonness_pool, commonness_threshold)
+            if commonness > commonness_max_count:
+                is_confirmed = False
+
             matches.append({
                 "matched_paper": bucket["paper"],
                 "score": best_score,

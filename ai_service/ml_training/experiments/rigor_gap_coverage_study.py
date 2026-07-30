@@ -131,13 +131,19 @@ def load_unrelated_documents(n_docs_per_category=10, min_chars=3000):
 CORROBORATION_THRESHOLD = 0.50
 MIN_CORROBORATING_CHUNKS = 2
 DOC_THRESHOLD_CANDIDATES = [0.75, 0.80, 0.85, 0.90, 0.92, 0.94, 0.96]
+COMMONNESS_THRESHOLD = 0.97
+COMMONNESS_MAX_COUNT = 5
+COMMONNESS_REFERENCE_PATH = os.path.join(
+    r"c:\Users\hp\Desktop\aspuinsight\aspu-insight\ai_service\ml_models", "commonness_reference_arpd.npy")
 
 
 def collect_document_pair_stats(model, n_docs_per_category=10):
     """For every genuinely-unrelated (cross-category) document pair in the corpus, compute the
-    single best chunk-pair score AND how many of the query doc's chunks independently score
-    >= CORROBORATION_THRESHOLD against that same other paper. Cached once, reused for every
-    threshold/corroboration-rule combination tested afterwards (avoids re-embedding)."""
+    single best chunk-pair score, how many of the query doc's chunks independently score
+    >= CORROBORATION_THRESHOLD against that same other paper, AND the commonness count of the
+    best-matching own chunk against the full reference pool (bootstrap + all loaded docs
+    combined, approximating the live growing platform corpus). Cached once, reused for every
+    threshold/rule combination tested afterwards (avoids re-embedding)."""
     docs = load_unrelated_documents(n_docs_per_category=n_docs_per_category)
     doc_vectors = {}
     total_chunks = 0
@@ -151,12 +157,27 @@ def collect_document_pair_stats(model, n_docs_per_category=10):
         doc_vectors[key] = model.encode(chunks, show_progress_bar=False) if chunks else np.zeros((0, 384))
     print(f"  (citation-quote filter: excluded {total_dropped}/{total_chunks} chunks flagged as declared quotations)")
 
-    pair_stats = []  # (max_score, corroborating_chunks, n_own_chunks)
+    bootstrap_pool = np.load(COMMONNESS_REFERENCE_PATH) if os.path.exists(COMMONNESS_REFERENCE_PATH) else np.zeros((0, 384))
+    live_pool_by_key = {k: v for k, v in doc_vectors.items() if len(v)}
+    total_live = sum(len(v) for v in live_pool_by_key.values())
+    print(f"  (commonness reference pool: {len(bootstrap_pool)} bootstrap + up to {total_live} live "
+          f"[excluding the query document's own chunks each time, mirroring production's exclude(paper_id=paper.id)])")
+
+    pair_stats = []  # (max_score, corroborating_chunks, n_own_chunks, qkey, commonness_count)
     for q in docs:
         qkey = q["path"]
         q_vec = doc_vectors[qkey]
         if len(q_vec) == 0:
             continue
+        # يستبعد وثيقة الاستعلام نفسها من مكتبة المرجعية الحيّة (كما يستبعد الإنتاج ورقة
+        # المستخدم نفسها) — وإلا فإن المقاطع المتراكبة داخل نفس الوثيقة (بسبب التداخل بين
+        # نوافذ التقطيع) تتطابق مع نفسها فتُضخِّم عدد "الشيوع" زائفاً لكل مقطع تقريباً.
+        other_live = [v for k, v in live_pool_by_key.items() if k != qkey]
+        live_pool_excl_self = np.concatenate(other_live) if other_live else np.zeros((0, q_vec.shape[1]))
+        commonness_pool = (
+            np.concatenate([bootstrap_pool, live_pool_excl_self])
+            if len(bootstrap_pool) else live_pool_excl_self
+        )
         for c in docs:
             ckey = c["path"]
             if ckey == qkey or q["category"] == c["category"]:
@@ -165,19 +186,23 @@ def collect_document_pair_stats(model, n_docs_per_category=10):
             if len(c_vec) == 0:
                 continue
             scores = cosine_similarity(q_vec, c_vec)
-            max_score = float(scores.max())
+            max_index = np.unravel_index(np.argmax(scores), scores.shape)
+            max_score = float(scores[max_index])
             corroborating = int((scores.max(axis=1) >= CORROBORATION_THRESHOLD).sum())
-            pair_stats.append((max_score, corroborating, len(q_vec), qkey))
+            commonness = int((cosine_similarity(q_vec[max_index[0]].reshape(1, -1), commonness_pool)[0] >= COMMONNESS_THRESHOLD).sum()) if len(commonness_pool) else 0
+            pair_stats.append((max_score, corroborating, len(q_vec), qkey, commonness))
     return pair_stats
 
 
-def document_level_fpr_at(pair_stats, threshold, use_corroboration):
+def document_level_fpr_at(pair_stats, threshold, use_corroboration, use_commonness=False):
     by_query = {}
-    for max_score, corroborating, n_own, qkey in pair_stats:
+    for max_score, corroborating, n_own, qkey, commonness in pair_stats:
         if use_corroboration and n_own >= MIN_CORROBORATING_CHUNKS:
             is_confirmed = max_score >= threshold and corroborating >= MIN_CORROBORATING_CHUNKS
         else:
             is_confirmed = max_score >= threshold
+        if use_commonness and commonness > COMMONNESS_MAX_COUNT:
+            is_confirmed = False
         by_query.setdefault(qkey, False)
         if is_confirmed:
             by_query[qkey] = True
@@ -209,12 +234,13 @@ def analyze_model(name, model_path, eval_pairs):
     print(f"  max cross-document chunk-pair score observed: {max_scores.max():.4f} (p95={np.percentile(max_scores,95):.4f})")
 
     print("\n  Threshold sweep on the DOCUMENT-LEVEL false-accusation rate (the metric that actually matters):")
-    print(f"  {'threshold':>9} | {'no-corrob. FPR':>15} | {'w/ corrob. FPR':>15}")
+    print(f"  {'threshold':>9} | {'no-corrob. FPR':>15} | {'w/ corrob. FPR':>15} | {'w/ commonness FPR':>18}")
     for t in DOC_THRESHOLD_CANDIDATES:
         _, _, fpr_plain = document_level_fpr_at(pair_stats, t, use_corroboration=False)
         _, _, fpr_corrob = document_level_fpr_at(pair_stats, t, use_corroboration=True)
+        _, _, fpr_common = document_level_fpr_at(pair_stats, t, use_corroboration=True, use_commonness=True)
         marker = " <- current production" if t == CONFIRMED_THRESHOLD else ""
-        print(f"  {t:>9.2f} | {fpr_plain*100:>13.1f}% | {fpr_corrob*100:>13.1f}%{marker}")
+        print(f"  {t:>9.2f} | {fpr_plain*100:>13.1f}% | {fpr_corrob*100:>13.1f}% | {fpr_common*100:>16.1f}%{marker}")
 
     return sims, labels
 
