@@ -10,7 +10,7 @@ class PlagiarismSourceSerializer(serializers.ModelSerializer):
     class Meta:
         model = PlagiarismSource
         fields = [
-            'id', 'source_type', 'matched_paper', 'matched_paper_title',
+            'id', 'source_type', 'confidence_level', 'matched_paper', 'matched_paper_title',
             'source_url', 'source_title', 'match_percentage',
             'own_text_snippet', 'source_text_snippet'
         ]
@@ -22,7 +22,7 @@ class PlagiarismReportSerializer(serializers.ModelSerializer):
         model = PlagiarismReport
         fields = [
             'id', 'status', 'total_similarity_score', 'internal_similarity_score',
-            'external_similarity_score', 'ai_keywords', 'checked_at', 'sources'
+            'external_similarity_score', 'requires_human_review', 'ai_keywords', 'checked_at', 'sources'
         ]
 
 class ResearchPaperDetailSerializer(serializers.ModelSerializer):

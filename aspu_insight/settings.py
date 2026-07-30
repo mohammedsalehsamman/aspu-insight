@@ -192,7 +192,7 @@ KEYWORD_EXTRACTOR_MODEL = config('KEYWORD_EXTRACTOR_MODEL', default=str(BASE_DIR
 
 PLAGIARISM_EMBEDDING_MODEL = config(
     'PLAGIARISM_EMBEDDING_MODEL',
-    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'experiments' / 'exp8-domain-specific')
+    default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'experiments' / 'exp9-balanced-domain-APPROVED-BACKUP')
 )
 # النموذج الأساس غير المُضبَط دقيقاً — يُستخدَم لأي مقارنة عابرة للغات (عربي↔غير عربي) أو خارجية،
 # لأن PLAGIARISM_EMBEDDING_MODEL المُضبَط دقيقاً أُحسِّن للعربية تحديداً وضعُف أداؤه الإنجليزي.
@@ -200,8 +200,18 @@ PLAGIARISM_BASE_EMBEDDING_MODEL = config(
     'PLAGIARISM_BASE_EMBEDDING_MODEL',
     default=str(BASE_DIR / 'ai_service' / 'ml_models' / 'paraphrase-multilingual-MiniLM-L12-v2-base')
 )
+# مفتاح اختياري ومجاني (سجّل على semanticscholar.org/product/api) — يمنح 1 طلب/ثانية مخصَّصاً
+# بدل التنافس على المجمع المشترك غير المُصادَق عليه (1000 طلب/ثانية بين كل مستخدمي الإنترنت، يتشبَّع كثيراً).
+SEMANTIC_SCHOLAR_API_KEY = config('SEMANTIC_SCHOLAR_API_KEY', default='')
 PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD = config('PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD', default=0.75, cast=float)
 PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD = config('PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD', default=0.6, cast=float)
+# التصنيف ثنائي المستوى: أي تطابق بين هذا الحد والحد الأعلى (INTERNAL/EXTERNAL_SIMILARITY_THRESHOLD) يُصنَّف
+# "مشتبه به يحتاج مراجعة بشرية" بدل تجاهله بالكامل — يعالج ضعف كشف إعادة الصياغة الحقيقية دون إعادة تدريب.
+# القيمة 0.25 معايَرة تجريبياً على التوزيعين الفعليين (تقرير calibrate_two_tier_threshold.py) بحيث
+# تلتقط أضعف حالة إعادة صياغة حقيقية مُختبَرة يدوياً (0.2667 على نموذج 9، 0.2985 على نموذج 10)، على
+# حساب قبول نسبة أعلى من الإنذارات الكاذبة على أزواج غير مرتبطة أصلاً — مقبول لأنها للمراجعة لا للحكم.
+PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD = config('PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD', default=0.25, cast=float)
+PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD = config('PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD', default=0.25, cast=float)
 PLAGIARISM_CHUNK_SENTENCES = config('PLAGIARISM_CHUNK_SENTENCES', default=4, cast=int)
 PLAGIARISM_CHUNK_OVERLAP = config('PLAGIARISM_CHUNK_OVERLAP', default=1, cast=int)
 VALUESERP_API_KEY = config('VALUESERP_API_KEY', default='')

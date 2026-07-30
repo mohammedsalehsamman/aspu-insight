@@ -54,24 +54,37 @@ def _extract_pdf_text_from_url(url, max_chars=5000, timeout=8, max_pages=5):
         return None
 
 
-def search_semantic_scholar(keywords, chunks, vectors, limit=3):
+def search_semantic_scholar(keywords, chunks, vectors, limit=3, max_retries=3):
     query = " ".join((keywords or [])[:5]).strip()
     if not query or not chunks:
         return []
 
-    try:
-        response = requests.get(
-            "https://api.semanticscholar.org/graph/v1/paper/search",
-            params={"query": query, "limit": limit, "fields": "title,url,abstract,openAccessPdf"},
-            timeout=5,
-        )
-        response.raise_for_status()
-        papers = response.json().get("data", [])
-    except requests.RequestException:
-        logger.exception("Semantic Scholar search failed (non-blocking)")
-        return []
+    api_key = getattr(settings, 'SEMANTIC_SCHOLAR_API_KEY', '')
+    headers = {"x-api-key": api_key} if api_key else {}
+
+    papers = []
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(
+                "https://api.semanticscholar.org/graph/v1/paper/search",
+                params={"query": query, "limit": limit, "fields": "title,url,abstract,openAccessPdf"},
+                headers=headers,
+                timeout=20,
+            )
+            if response.status_code == 429 and attempt < max_retries - 1:
+                # المجمع المجاني غير المُصادَق عليه مشترَك بين كل مستخدمي الإنترنت (1000 طلب/ثانية إجمالاً) ويُشبَع
+                # كثيراً؛ إعادة محاولة قصيرة تحل أغلب الحالات دون الحاجة لمفتاح API.
+                time.sleep(2 * (attempt + 1))
+                continue
+            response.raise_for_status()
+            papers = response.json().get("data", [])
+            break
+        except requests.RequestException:
+            logger.exception("Semantic Scholar search failed (non-blocking)")
+            return []
 
     threshold = getattr(settings, 'PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD', 0.6)
+    suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD', 0.30)
     results = []
     for paper_data in papers:
         # نفضّل مقارنة النص الكامل للبحث المفتوح الوصول عند توفره؛ الملخص فقط بديل احتياطي
@@ -80,11 +93,12 @@ def search_semantic_scholar(keywords, chunks, vectors, limit=3):
         candidate_text = _extract_pdf_text_from_url(pdf_url) or paper_data.get("abstract")
 
         score, own_snippet, source_snippet = _best_match_against_chunks(chunks, vectors, candidate_text)
-        if score >= threshold:
+        if score >= suspected_threshold:
             results.append({
                 "source_url": paper_data.get("url", "") or "",
                 "source_title": paper_data.get("title", "") or "",
                 "score": score,
+                "confidence_level": "confirmed" if score >= threshold else "suspected",
                 "own_snippet": own_snippet,
                 "source_snippet": source_snippet,
             })
@@ -111,17 +125,19 @@ def search_core(keywords, chunks, vectors, limit=3):
         return []
 
     threshold = getattr(settings, 'PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD', 0.6)
+    suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD', 0.30)
     results = []
     for work in works:
         # CORE يوفّر أحياناً النص الكامل مباشرة في الاستجابة، دون الحاجة لتنزيل PDF منفصل
         candidate_text = work.get("fullText") or work.get("abstract")
         score, own_snippet, source_snippet = _best_match_against_chunks(chunks, vectors, candidate_text)
-        if score >= threshold:
+        if score >= suspected_threshold:
             source_url = work.get("downloadUrl") or ""
             results.append({
                 "source_url": source_url,
                 "source_title": work.get("title", "") or "",
                 "score": score,
+                "confidence_level": "confirmed" if score >= threshold else "suspected",
                 "own_snippet": own_snippet,
                 "source_snippet": source_snippet,
             })
@@ -134,6 +150,7 @@ def search_valueserp(chunks, vectors):
         return []
 
     threshold = getattr(settings, 'PLAGIARISM_EXTERNAL_SIMILARITY_THRESHOLD', 0.6)
+    suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD', 0.30)
     model = _embedding_model()
     results = []
 
@@ -156,11 +173,12 @@ def search_valueserp(chunks, vectors):
                 continue
             snippet_vector = model.encode([snippet])
             score = float(cosine_similarity([chunk_vector], snippet_vector)[0][0])
-            if score >= threshold:
+            if score >= suspected_threshold:
                 results.append({
                     "source_url": item.get("link", "") or "",
                     "source_title": item.get("title", "") or "",
                     "score": score,
+                    "confidence_level": "confirmed" if score >= threshold else "suspected",
                     "own_snippet": chunk,
                     "source_snippet": snippet,
                 })

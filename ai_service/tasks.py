@@ -223,9 +223,18 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
             ai_error = ai_error or str(e)
             logger.exception("External plagiarism check failed for paper %s (non-blocking): %s", paper_id, e)
 
-    internal_score = max([m["score"] for m in internal_matches], default=0.0) * 100
-    external_score = max([m["score"] for m in external_matches], default=0.0) * 100
+    # "مؤكَّد" هو ما يُحتسَب ضمن نسب التشابه الرسمية؛ "مشتبه به" (تشابه دلالي متوسط قد يكون
+    # إعادة صياغة غير مكتشَفة حرفياً) لا يُحتسَب ضمن النسبة بل يُعرَض للمراجع البشري بشكل منفصل،
+    # حلاً لضعف كشف إعادة الصياغة الحقيقية دون الحاجة لإعادة تدريب النموذج.
+    confirmed_internal = [m for m in internal_matches if m.get("confidence_level") == "confirmed"]
+    confirmed_external = [m for m in external_matches if m.get("confidence_level") == "confirmed"]
+    suspected_internal = [m for m in internal_matches if m.get("confidence_level") == "suspected"]
+    suspected_external = [m for m in external_matches if m.get("confidence_level") == "suspected"]
+
+    internal_score = max([m["score"] for m in confirmed_internal], default=0.0) * 100
+    external_score = max([m["score"] for m in confirmed_external], default=0.0) * 100
     total_score = max(internal_score, external_score)
+    requires_human_review = bool((suspected_internal or suspected_external) and not (confirmed_internal or confirmed_external))
 
     PlagiarismReport.objects.filter(paper=paper).delete()
     report = PlagiarismReport.objects.create(
@@ -234,6 +243,7 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         total_similarity_score=total_score,
         internal_similarity_score=internal_score,
         external_similarity_score=external_score,
+        requires_human_review=requires_human_review,
         ai_keywords=ai_keywords,
     )
 
@@ -241,6 +251,7 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         PlagiarismSource.objects.create(
             report=report,
             source_type=PlagiarismSource.SourceType.INTERNAL,
+            confidence_level=match.get("confidence_level", PlagiarismSource.ConfidenceLevel.CONFIRMED),
             matched_paper=match["matched_paper"],
             source_title=match["matched_paper"].title,
             match_percentage=match["score"] * 100,
@@ -252,6 +263,7 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         PlagiarismSource.objects.create(
             report=report,
             source_type=PlagiarismSource.SourceType.EXTERNAL,
+            confidence_level=match.get("confidence_level", PlagiarismSource.ConfidenceLevel.CONFIRMED),
             source_url=match["source_url"],
             source_title=match["source_title"],
             match_percentage=match["score"] * 100,

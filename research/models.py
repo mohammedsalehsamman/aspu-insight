@@ -61,6 +61,10 @@ class PlagiarismReport(models.Model):
     total_similarity_score = models.FloatField(default=0.0)
     internal_similarity_score = models.FloatField(default=0.0)
     external_similarity_score = models.FloatField(default=0.0)
+    requires_human_review = models.BooleanField(
+        default=False,
+        help_text="صحيح إذا وُجد تشابه بمستوى 'مشتبه به' فقط (دون أي تطابق مؤكَّد) — يحتاج مراجعة بشرية قبل القرار"
+    )
     ai_keywords = models.JSONField(default=list, blank=True)
     checked_at = models.DateTimeField(auto_now_add=True)
 
@@ -72,8 +76,16 @@ class PlagiarismSource(models.Model):
         INTERNAL = 'internal', 'Internal (platform corpus)'
         EXTERNAL = 'external', 'External (web/academic search)'
 
+    class ConfidenceLevel(models.TextChoices):
+        CONFIRMED = 'confirmed', 'Confirmed match'
+        SUSPECTED = 'suspected', 'Suspected paraphrase — needs human review'
+
     report = models.ForeignKey(PlagiarismReport, on_delete=models.CASCADE, related_name='sources')
     source_type = models.CharField(max_length=10, choices=SourceType.choices, default=SourceType.EXTERNAL)
+    confidence_level = models.CharField(
+        max_length=10, choices=ConfidenceLevel.choices, default=ConfidenceLevel.CONFIRMED,
+        help_text="مؤكَّد (فوق حد الكشف الأساسي) أو مشتبه به (تشابه دلالي متوسط قد يكون إعادة صياغة، يحتاج مراجعة بشرية)"
+    )
     matched_paper = models.ForeignKey(
         ResearchPaper, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='plagiarism_matches_as_source'

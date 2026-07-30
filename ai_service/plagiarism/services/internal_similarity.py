@@ -48,6 +48,7 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
         return []
 
     threshold = getattr(settings, 'PLAGIARISM_INTERNAL_SIMILARITY_THRESHOLD', 0.75)
+    suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD', 0.30)
 
     others = (
         PaperChunkEmbedding.objects
@@ -86,10 +87,11 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
         scores = cosine_similarity(own_vectors, other_vectors)
         best_index = np.unravel_index(np.argmax(scores), scores.shape)
         best_score = float(scores[best_index])
-        if best_score >= threshold:
+        if best_score >= suspected_threshold:
             matches.append({
                 "matched_paper": bucket["paper"],
                 "score": best_score,
+                "confidence_level": "confirmed" if best_score >= threshold else "suspected",
                 "own_snippet": chunks[best_index[0]],
                 "source_snippet": usable_rows[best_index[1]].chunk_text,
             })

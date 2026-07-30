@@ -10,4 +10,5 @@ class ResearchPaperAdmin(admin.ModelAdmin):
 
 @admin.register(PlagiarismReport)
 class PlagiarismReportAdmin(admin.ModelAdmin):
-    list_display = ('paper', 'total_similarity_score', 'checked_at')
+    list_display = ('paper', 'total_similarity_score', 'requires_human_review', 'checked_at')
+    list_filter = ('requires_human_review', 'status')
