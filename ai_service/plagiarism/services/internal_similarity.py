@@ -47,9 +47,13 @@ def store_chunk_embeddings(paper, raw_text):
     chunks = chunk_text(core_text)
     PaperChunkEmbedding.objects.filter(paper=paper).delete()
     if not chunks:
-        return [], None, None, "unknown"
+        return [], None, None, []
 
-    language = detect_language(raw_text)
+    # كشف اللغة لكل مقطع على حدة، لا للورقة كاملة مرة واحدة — ورقة "عربية" بمجملها قد تحوي
+    # مقاطع إنجليزية (ملخص مترجَم شائع في جامعات المغرب العربي مثلاً)، ومقارنتها بالموديل
+    # العربي المُضبَط دقيقاً بدل الموديل الأساس تُنتج تشابهاً غير موثوق (تأكَّد تجريبياً: مقطع
+    # عن ضغوط التمريض تطابق 0.52 مع نص قانوني إنجليزي لمجرد أن كلا الورقتين "عربيتان" إجمالاً).
+    chunk_languages = [detect_language(c) for c in chunks]
     finetuned_vectors = _finetuned_model().encode(chunks)
     base_vectors = _base_model().encode(chunks)
 
@@ -60,15 +64,17 @@ def store_chunk_embeddings(paper, raw_text):
             chunk_text=chunk,
             embedding_vector=np.asarray(ft_vector).tolist(),
             base_embedding_vector=np.asarray(base_vector).tolist(),
-            detected_language=language,
+            detected_language=chunk_lang,
             is_citation=is_citation_chunk(chunk),
         )
-        for index, (chunk, ft_vector, base_vector) in enumerate(zip(chunks, finetuned_vectors, base_vectors))
+        for index, (chunk, ft_vector, base_vector, chunk_lang) in enumerate(
+            zip(chunks, finetuned_vectors, base_vectors, chunk_languages)
+        )
     ])
-    return chunks, finetuned_vectors, base_vectors, language
+    return chunks, finetuned_vectors, base_vectors, chunk_languages
 
 
-def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, language):
+def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, chunk_languages):
     from research.models import PaperChunkEmbedding
 
     if finetuned_vectors is None or len(chunks) == 0:
@@ -90,8 +96,10 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
     if not own_indices:
         return []
     filtered_chunks = [chunks[i] for i in own_indices]
+    filtered_languages = [chunk_languages[i] for i in own_indices]
     finetuned_vectors = np.array(finetuned_vectors)[own_indices]
     base_vectors = np.array(base_vectors)[own_indices]
+    own_is_ar = np.array([lang == "ar" for lang in filtered_languages])
 
     others = list(
         PaperChunkEmbedding.objects
@@ -115,33 +123,25 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
     matches = []
     for bucket in by_paper.values():
         rows = bucket["rows"]
-        other_language = rows[0].detected_language
-
-        # مقارنة عربي-عربي تستخدم الموديل المُضبَط دقيقاً (الأفضل هنا)؛ أي مقارنة عابرة
-        # للغات (أو لغة غير مكتشَفة) تستخدم الموديل الأساس المشترك، لأن المقارنة بين متجهين
-        # من موديلين مختلفين غير صحيحة رياضياً (فضاءان مختلفان تماماً).
-        if language == "ar" and other_language == "ar":
-            own_vectors = finetuned_vectors
-            usable_rows = [r for r in rows if r.embedding_vector is not None]
-            other_vectors = [r.embedding_vector for r in usable_rows]
-            commonness_pool = (
-                np.concatenate([bootstrap_pool, live_finetuned_pool])
-                if len(bootstrap_pool) and len(live_finetuned_pool)
-                else (bootstrap_pool if len(bootstrap_pool) else live_finetuned_pool)
-            )
-        else:
-            own_vectors = base_vectors
-            usable_rows = [r for r in rows if r.base_embedding_vector is not None]
-            other_vectors = [r.base_embedding_vector for r in usable_rows]
-            commonness_pool = live_base_pool  # لا يوجد ملف مرجعي ثابت للموديل الأساس بعد
-
-        if not other_vectors:
+        usable_rows = [r for r in rows if r.embedding_vector is not None and r.base_embedding_vector is not None]
+        if not usable_rows:
             # بحث آخر لم تُحسَب له بعد المتجهات اللازمة لهذه المقارنة تحديداً (بيانات قديمة
             # قبل إضافة هذا الحقل، أو لم يُعالَج بعد) — يُتجاوَز بأمان بدل الانهيار.
             continue
 
-        other_vectors = np.array(other_vectors)
-        scores = cosine_similarity(own_vectors, other_vectors)
+        other_finetuned = np.array([r.embedding_vector for r in usable_rows])
+        other_base = np.array([r.base_embedding_vector for r in usable_rows])
+        other_is_ar = np.array([r.detected_language == "ar" for r in usable_rows])
+
+        # اختيار الموديل الصحيح لكل زوج مقطعين على حدة، لا لكل ورقة ككل: عربي-عربي يستخدم
+        # الموديل المُضبَط دقيقاً (الأفضل هنا)؛ أي مزيج آخر (حتى داخل ورقتين "عربيتين" إجمالاً،
+        # قد يحوي أحدهما مقطعاً إنجليزياً كملخص مترجَم) يستخدم الموديل الأساس المشترك، لأن
+        # المقارنة بين متجهين من موديلين مختلفين غير صحيحة رياضياً (فضاءان مختلفان تماماً).
+        scores_finetuned = cosine_similarity(finetuned_vectors, other_finetuned)
+        scores_base = cosine_similarity(base_vectors, other_base)
+        use_finetuned_mask = np.outer(own_is_ar, other_is_ar)
+        scores = np.where(use_finetuned_mask, scores_finetuned, scores_base)
+
         best_index = np.unravel_index(np.argmax(scores), scores.shape)
         best_score = float(scores[best_index])
         if best_score >= suspected_threshold:
@@ -150,7 +150,7 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
             # (دراسة rigor_gap_coverage_study.py). لذلك "التأكيد" يتطلب دليلاً داعماً من أكثر من
             # مقطع مستقل يطابق نفس الورقة الأخرى، لا أعلى قيمة واحدة فقط مهما علت — إلا إذا كانت
             # الورقة نفسها قصيرة جداً (أقل من الحد الأدنى من المقاطع) فلا معنى لطلب تعدد الأدلة.
-            if len(own_vectors) < min_corroborating_chunks:
+            if len(finetuned_vectors) < min_corroborating_chunks:
                 corroborating_chunks = 1 if best_score >= threshold else 0
                 is_confirmed = best_score >= threshold
             else:
@@ -160,8 +160,19 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
 
             # ترجيح عكسي بتكرار العبارة: مقطعنا الأفضل تطابقاً هنا قد يكون صياغة أكاديمية شائعة
             # عبر مكتبة كاملة (لا خاصة بهاتين الورقتين تحديداً) — إن كان كذلك، لا يُعتبَر دليلاً
-            # كافياً للتأكيد مهما علت درجته مع هذه الورقة بالذات.
-            commonness = _commonness_count(own_vectors[best_index[0]], commonness_pool, commonness_threshold)
+            # كافياً للتأكيد مهما علت درجته مع هذه الورقة بالذات. تُستخدَم مكتبة الفضاء نفسه
+            # (المُضبَط دقيقاً أو الأساس) الذي حسم أفضل تطابق تحديداً.
+            if bool(use_finetuned_mask[best_index]):
+                commonness_pool = (
+                    np.concatenate([bootstrap_pool, live_finetuned_pool])
+                    if len(bootstrap_pool) and len(live_finetuned_pool)
+                    else (bootstrap_pool if len(bootstrap_pool) else live_finetuned_pool)
+                )
+                best_vector = finetuned_vectors[best_index[0]]
+            else:
+                commonness_pool = live_base_pool  # لا يوجد ملف مرجعي ثابت للموديل الأساس بعد
+                best_vector = base_vectors[best_index[0]]
+            commonness = _commonness_count(best_vector, commonness_pool, commonness_threshold)
             if commonness > commonness_max_count:
                 is_confirmed = False
 
@@ -179,5 +190,5 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
 
 
 def run_internal_check(paper, raw_text):
-    chunks, finetuned_vectors, base_vectors, language = store_chunk_embeddings(paper, raw_text)
-    return find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, language)
+    chunks, finetuned_vectors, base_vectors, chunk_languages = store_chunk_embeddings(paper, raw_text)
+    return find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, chunk_languages)
