@@ -1,4 +1,5 @@
 import os
+import re
 import glob
 import json
 import random
@@ -10,6 +11,28 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics import roc_auc_score
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
+# Mirrors ai_service/plagiarism/services/chunking.py::is_citation_chunk exactly (duplicated
+# here, not imported, so this script can run standalone without django.setup()).
+_QUOTE_MARK_RE = re.compile(r'["“”«»﴾﴿]')
+_CITATION_MARKER_RE = re.compile(
+    r'\[\d+(?:\s*,\s*\d+)*\]'
+    r'|\([^()]{0,40}(?:19|20)\d{2}\)'
+    r'|\([؀-ۿ\s]{2,25}:\s*\d{1,3}\)'
+    r'|et\s+al\.?'
+    r'|نقلاً?\s+عن|كما\s+ورد\s+في|المصدر\s*:|بحسب\s+',
+    re.IGNORECASE,
+)
+_QURANIC_LIGATURE_RE = re.compile(r'[ﭐ-﷿ﹰ-﻿]')
+_QURANIC_LIGATURE_MIN_COUNT = 5
+
+
+def is_citation_chunk(text):
+    if not text:
+        return False
+    if len(_QURANIC_LIGATURE_RE.findall(text)) >= _QURANIC_LIGATURE_MIN_COUNT:
+        return True
+    return bool(_QUOTE_MARK_RE.search(text) and _CITATION_MARKER_RE.search(text))
 
 MODELS_ROOT = r"c:\Users\hp\Desktop\aspuinsight\aspu-insight\ai_service\ml_models\experiments"
 MODEL_9 = os.path.join(MODELS_ROOT, "exp9-balanced-domain-APPROVED-BACKUP")
@@ -117,10 +140,16 @@ def collect_document_pair_stats(model, n_docs_per_category=10):
     threshold/corroboration-rule combination tested afterwards (avoids re-embedding)."""
     docs = load_unrelated_documents(n_docs_per_category=n_docs_per_category)
     doc_vectors = {}
+    total_chunks = 0
+    total_dropped = 0
     for d in docs:
         key = d["path"]
-        chunks = chunk_simple(d["text"])
+        raw_chunks = chunk_simple(d["text"])
+        total_chunks += len(raw_chunks)
+        chunks = [c for c in raw_chunks if not is_citation_chunk(c)]
+        total_dropped += len(raw_chunks) - len(chunks)
         doc_vectors[key] = model.encode(chunks, show_progress_bar=False) if chunks else np.zeros((0, 384))
+    print(f"  (citation-quote filter: excluded {total_dropped}/{total_chunks} chunks flagged as declared quotations)")
 
     pair_stats = []  # (max_score, corroborating_chunks, n_own_chunks)
     for q in docs:

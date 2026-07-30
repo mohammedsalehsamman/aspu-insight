@@ -4,7 +4,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from ai_service.utils.embeddings import get_embedding_model
 from ai_service.ieee_checker.services.citation_extractor import detect_language
-from .chunking import chunk_text
+from .chunking import chunk_text, is_citation_chunk
 
 
 def _finetuned_model():
@@ -35,6 +35,7 @@ def store_chunk_embeddings(paper, raw_text):
             embedding_vector=np.asarray(ft_vector).tolist(),
             base_embedding_vector=np.asarray(base_vector).tolist(),
             detected_language=language,
+            is_citation=is_citation_chunk(chunk),
         )
         for index, (chunk, ft_vector, base_vector) in enumerate(zip(chunks, finetuned_vectors, base_vectors))
     ])
@@ -52,9 +53,22 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
     corroboration_threshold = getattr(settings, 'PLAGIARISM_CORROBORATION_THRESHOLD', 0.50)
     min_corroborating_chunks = getattr(settings, 'PLAGIARISM_MIN_CORROBORATING_CHUNKS', 2)
 
+    # اقتباس مُصرَّح به (علامات تنصيص + إشارة استشهاد) ليس انتحالاً — نصوص مرجعية مشتركة (نصوص
+    # دينية/كلاسيكية، مواد قانونية، تعريفات طبية معيارية) يقتبسها أكثر من بحث مستقل بشكل مشروع
+    # تماماً، وهذا تسبَّب تجريبياً بنسبة اتهام كاذب مرتفعة جداً على مستوى الورقة الكاملة (دراسة
+    # rigor_gap_coverage_study.py). تُستبعَد هذه المقاطع من المقارنة على جانبَي الورقتين معاً.
+    own_citation_mask = [is_citation_chunk(c) for c in chunks]
+    own_indices = [i for i, is_cite in enumerate(own_citation_mask) if not is_cite]
+    if not own_indices:
+        return []
+    filtered_chunks = [chunks[i] for i in own_indices]
+    finetuned_vectors = np.array(finetuned_vectors)[own_indices]
+    base_vectors = np.array(base_vectors)[own_indices]
+
     others = (
         PaperChunkEmbedding.objects
         .exclude(paper_id=paper.id)
+        .exclude(is_citation=True)
         .select_related('paper')
     )
 
@@ -107,7 +121,7 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, langua
                 "score": best_score,
                 "confidence_level": "confirmed" if is_confirmed else "suspected",
                 "corroborating_chunks": corroborating_chunks,
-                "own_snippet": chunks[best_index[0]],
+                "own_snippet": filtered_chunks[best_index[0]],
                 "source_snippet": usable_rows[best_index[1]].chunk_text,
             })
 

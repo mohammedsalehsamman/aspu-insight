@@ -109,6 +109,10 @@ class PaperChunkEmbedding(models.Model):
         help_text="متجه النموذج الأساس (للمقارنات العابرة للغات، عربي↔غير عربي)"
     )
     detected_language = models.CharField(max_length=10, blank=True, default='')
+    is_citation = models.BooleanField(
+        default=False,
+        help_text="اقتباس مُصرَّح به (علامات تنصيص + إشارة استشهاد) — يُستبعَد من مقارنة الانتحال الداخلية"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
