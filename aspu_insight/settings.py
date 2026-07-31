@@ -218,6 +218,11 @@ PLAGIARISM_SUSPECTED_EXTERNAL_THRESHOLD = config('PLAGIARISM_SUSPECTED_EXTERNAL_
 # أكثر من مقطع مستقل، لا مطابقة واحدة معزولة مهما علت قيمتها.
 PLAGIARISM_CORROBORATION_THRESHOLD = config('PLAGIARISM_CORROBORATION_THRESHOLD', default=0.50, cast=float)
 PLAGIARISM_MIN_CORROBORATING_CHUNKS = config('PLAGIARISM_MIN_CORROBORATING_CHUNKS', default=2, cast=int)
+# مُنفَصل عمداً عن PLAGIARISM_MIN_CORROBORATING_CHUNKS أعلاه: ذاك "كم مقطعاً داعماً يلزم"، وهذا
+# "من كم مقطعاً إجمالياً في الورقة تصبح مطالبة الدليل الداعم منطقية أصلاً". اكتُشف تجريبياً أن
+# ورقة قصيرة جداً (مقطعان مثلاً) لن تحقق شرط "مقطعين داعمين" أبداً حتى لو كانت الفقرة الوحيدة
+# فيها منسوخة حرفياً 100% — راجع دراسة corroboration_bypass_threshold_study.py لمعايرة هذا الرقم.
+PLAGIARISM_MIN_CHUNKS_FOR_CORROBORATION = config('PLAGIARISM_MIN_CHUNKS_FOR_CORROBORATION', default=4, cast=int)
 # ترجيح عكسي بتكرار العبارة (شبيه بفكرة IDF): مقطع يتشابه بشدة مع عدد كبير من مقاطع أخرى عبر
 # مكتبة مرجعية (وليس فقط مع الورقة الأخرى قيد المقارنة) هو على الأرجح أسلوب أكاديمي شائع/صيغة
 # متكرّرة، لا دليلاً خاصاً على النسخ بين ورقتين تحديداً — يُخفَّض تلقائياً لمستوى "مشتبه به".

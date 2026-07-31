@@ -12,6 +12,7 @@ _CITATION_MARKER_RE = re.compile(
     r'|\([^()]{0,40}(?:19|20)\d{2}\)'               # (Author, 2019) APA-style
     r'|\([؀-ۿ\s]{2,25}:\s*\d{1,3}\)'      # (سورة: آية) Quranic verse reference
     r'|et\s+al\.?'
+    r'|according\s+to\s+|as\s+cited\s+in\s+|as\s+stated\s+by\s+|source\s*:'   # English phrase markers
     r'|نقلاً?\s+عن|كما\s+ورد\s+في|المصدر\s*:|بحسب\s+',
     re.IGNORECASE,
 )

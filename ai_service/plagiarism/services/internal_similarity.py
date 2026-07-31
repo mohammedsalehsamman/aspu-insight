@@ -84,6 +84,7 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, chunk_
     suspected_threshold = getattr(settings, 'PLAGIARISM_SUSPECTED_INTERNAL_THRESHOLD', 0.30)
     corroboration_threshold = getattr(settings, 'PLAGIARISM_CORROBORATION_THRESHOLD', 0.50)
     min_corroborating_chunks = getattr(settings, 'PLAGIARISM_MIN_CORROBORATING_CHUNKS', 2)
+    min_chunks_for_corroboration = getattr(settings, 'PLAGIARISM_MIN_CHUNKS_FOR_CORROBORATION', 4)
     commonness_threshold = getattr(settings, 'PLAGIARISM_COMMONNESS_THRESHOLD', 0.60)
     commonness_max_count = getattr(settings, 'PLAGIARISM_COMMONNESS_MAX_COUNT', 5)
 
@@ -150,7 +151,7 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, chunk_
             # (دراسة rigor_gap_coverage_study.py). لذلك "التأكيد" يتطلب دليلاً داعماً من أكثر من
             # مقطع مستقل يطابق نفس الورقة الأخرى، لا أعلى قيمة واحدة فقط مهما علت — إلا إذا كانت
             # الورقة نفسها قصيرة جداً (أقل من الحد الأدنى من المقاطع) فلا معنى لطلب تعدد الأدلة.
-            if len(finetuned_vectors) < min_corroborating_chunks:
+            if len(finetuned_vectors) < min_chunks_for_corroboration:
                 corroborating_chunks = 1 if best_score >= threshold else 0
                 is_confirmed = best_score >= threshold
             else:
@@ -192,3 +193,4 @@ def find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, chunk_
 def run_internal_check(paper, raw_text):
     chunks, finetuned_vectors, base_vectors, chunk_languages = store_chunk_embeddings(paper, raw_text)
     return find_internal_matches(paper, chunks, finetuned_vectors, base_vectors, chunk_languages)
+
