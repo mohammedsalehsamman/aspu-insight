@@ -42,6 +42,12 @@ except Exception:
     logger.exception("IEEE checker services unavailable.")
     detect_language = extract_paper_title = perform_ieee_analysis = extract_text_from_file = None
 
+try:
+    from .metadata_quality.services.scorer import compute_metadata_quality
+except Exception:
+    logger.exception("Metadata quality scorer unavailable.")
+    compute_metadata_quality = None
+
 def extract_text_from_pdf(pdf_path: str) -> str:
     raw_text = ""
     try:
@@ -280,7 +286,43 @@ def check_paper_plagiarism_task(self, paper_id: int) -> dict:
         else f"Plagiarism AI check unavailable, proceeding without it: {ai_error}"
     )
     log_status_change(paper, from_status, paper.status, note=note)
+
+    compute_metadata_quality_task.delay(paper_id)
+
     return {"status": paper.status, "paper_id": paper_id, "ai_check_ok": ai_error is None}
+
+@shared_task(bind=True)
+def compute_metadata_quality_task(self, paper_id: int) -> dict:
+    try:
+        paper = ResearchPaper.objects.select_related('author').get(id=paper_id)
+    except ResearchPaper.DoesNotExist:
+        logger.error("ResearchPaper %s not found for metadata quality scoring", paper_id)
+        return {"status": "failed", "paper_id": paper_id, "error": "paper not found"}
+
+    from research.models import MetadataQualityReport
+    report, _ = MetadataQualityReport.objects.get_or_create(paper=paper)
+
+    if compute_metadata_quality is None:
+        report.status = MetadataQualityReport.Status.FAILED
+        report.error_message = "Metadata quality scoring service unavailable."
+        report.save(update_fields=["status", "error_message"])
+        return {"status": "failed", "paper_id": paper_id, "error": "service unavailable"}
+
+    try:
+        result = compute_metadata_quality(paper)
+        report.overall_score = result["overall_score"]
+        report.sub_scores = result["sub_scores"]
+        report.breakdown = result["breakdown"]
+        report.recommendations = result["recommendations"]
+        report.status = MetadataQualityReport.Status.COMPLETED
+        report.save()
+        return {"status": report.status, "paper_id": paper_id, "overall_score": report.overall_score}
+    except Exception as e:
+        logger.exception("Metadata quality scoring failed for paper %s: %s", paper_id, e)
+        report.status = MetadataQualityReport.Status.FAILED
+        report.error_message = str(e)
+        report.save(update_fields=["status", "error_message"])
+        return {"status": "failed", "paper_id": paper_id, "error": str(e)}
 
 @shared_task(bind=True)
 def compute_paper_embedding_task(self, paper_id: int) -> dict:

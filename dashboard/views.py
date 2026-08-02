@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from datetime import timedelta
 
@@ -10,7 +10,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdmin
 from accounts.models import User
-from research.models import ResearchPaper
+from research.models import ResearchPaper, MetadataQualityReport
 from editorReview.models import EditorReview
 from editorReview.serializers import EditorReviewSerializer
 from assistantReview.models import AssistantReview
@@ -65,6 +65,12 @@ class AdminDashboardStatsView(APIView):
             "ai_reports": {
                 "ieee_checks_by_status": _counts_by(IEEECheckReport.objects.all(), 'status'),
                 "claim_evidence_by_status": _counts_by(ClaimEvidenceGraphReport.objects.all(), 'status'),
+                "metadata_quality": {
+                    "by_status": _counts_by(MetadataQualityReport.objects.all(), 'status'),
+                    "average_score": MetadataQualityReport.objects.filter(
+                        status=MetadataQualityReport.Status.COMPLETED
+                    ).aggregate(avg=Avg('overall_score'))['avg'],
+                },
             },
         }
         return Response(data)

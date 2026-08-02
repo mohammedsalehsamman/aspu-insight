@@ -71,6 +71,36 @@ class PlagiarismReport(models.Model):
     def str(self):
         return f"Report for {self.paper.title}"
 
+class MetadataQualityReport(models.Model):
+    class Status(models.TextChoices):
+        PENDING   = 'pending',   'قيد المعالجة'
+        COMPLETED = 'completed', 'مكتمل'
+        FAILED    = 'failed',    'فشل'
+
+    paper = models.OneToOneField(ResearchPaper, on_delete=models.CASCADE, related_name='metadata_quality_report')
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    overall_score = models.FloatField(default=0.0)
+    sub_scores = models.JSONField(default=dict, blank=True)
+    breakdown = models.JSONField(default=list, blank=True)
+    recommendations = models.JSONField(default=list, blank=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'MetadataQualityReport'
+
+    def __str__(self):
+        return f"Metadata quality for {self.paper.title}: {self.overall_score}/100"
+
+    @property
+    def status_display_ar(self) -> str:
+        return {
+            'pending': 'قيد المعالجة',
+            'completed': 'مكتمل',
+            'failed': 'فشل',
+        }.get(self.status, self.status)
+
 class PlagiarismSource(models.Model):
     class SourceType(models.TextChoices):
         INTERNAL = 'internal', 'Internal (platform corpus)'

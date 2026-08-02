@@ -3,9 +3,10 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from research.models import ResearchPaper
 from committees.models import Committee, CommitteeMember
-from ai_service.tasks import check_paper_plagiarism_task, compute_paper_embedding_task
+from ai_service.tasks import check_paper_plagiarism_task, compute_paper_embedding_task, compute_metadata_quality_task
 
 EMBEDDING_RELEVANT_FIELDS = {'title', 'abstract', 'specialization'}
+METADATA_QUALITY_RELEVANT_FIELDS = {'title', 'abstract', 'specialization', 'pdf_file'}
 
 class ResearchPaperService:
 
@@ -117,11 +118,14 @@ class ResearchPaperService:
     @staticmethod
     def update_paper(paper, validated_data):
         needs_re_embedding = bool(EMBEDDING_RELEVANT_FIELDS & validated_data.keys())
+        needs_re_scoring = bool(METADATA_QUALITY_RELEVANT_FIELDS & validated_data.keys())
         for field, value in validated_data.items():
             setattr(paper, field, value)
         paper.save()
         if needs_re_embedding:
             transaction.on_commit(lambda: compute_paper_embedding_task.delay(paper.id))
+        if needs_re_scoring:
+            transaction.on_commit(lambda: compute_metadata_quality_task.delay(paper.id))
         return paper
 
     @staticmethod
