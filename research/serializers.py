@@ -1,7 +1,7 @@
 from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
 from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource, MetadataQualityReport
-from research.validators import validate_file_size
+from research.validators import validate_file_size, validate_pdf_content
 from committees.models import Committee, CommitteeMember
 
 class PlagiarismSourceSerializer(serializers.ModelSerializer):
@@ -39,7 +39,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
     pdf_file = serializers.FileField(
         required=False, allow_null=True,
-        validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf'])]
+        validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf']), validate_pdf_content]
     )
     plagiarism_score = serializers.SerializerMethodField()
     plagiarism_report_id = serializers.SerializerMethodField()

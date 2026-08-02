@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from rest_framework.exceptions import ValidationError
 
-from research.validators import validate_file_size
+from research.validators import validate_file_size, validate_pdf_content
 
 class ResearchPaper(models.Model):
     class Status(models.TextChoices):
@@ -21,7 +21,7 @@ class ResearchPaper(models.Model):
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True,
-                             validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf'])])
+                             validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf']), validate_pdf_content])
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
     is_paid_open_access = models.BooleanField(default=False)
     status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)

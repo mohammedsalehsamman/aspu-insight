@@ -17,6 +17,7 @@ from .serializers import (
     ClaimEvidenceGraphReportListSerializer,
 )
 from .tasks import analyze_claim_evidence_graph_task, analyze_ieee_check_task
+from .validators import validate_pdf_or_docx_content
 
 logger = logging.getLogger(__name__)
 
@@ -69,12 +70,9 @@ class IEEECheckView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        file_name_lower = document_file.name.lower()
-        if not (file_name_lower.endswith('.pdf') or file_name_lower.endswith('.docx')):
-            return Response(
-                {"error": "يُقبل ملف PDF (.pdf) أو DOCX (.docx) فقط"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        content_error = validate_pdf_or_docx_content(document_file)
+        if content_error:
+            return Response({"error": content_error}, status=status.HTTP_400_BAD_REQUEST)
 
         max_size = 10 * 1024 * 1024
         if document_file.size > max_size:
@@ -169,12 +167,9 @@ class ClaimEvidenceGraphAnalyzeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        file_name_lower = document_file.name.lower()
-        if not (file_name_lower.endswith('.pdf') or file_name_lower.endswith('.docx')):
-            return Response(
-                {"error": "يُقبل ملف PDF (.pdf) أو DOCX (.docx) فقط"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        content_error = validate_pdf_or_docx_content(document_file)
+        if content_error:
+            return Response({"error": content_error}, status=status.HTTP_400_BAD_REQUEST)
 
         max_size = 10 * 1024 * 1024
         if document_file.size > max_size:
