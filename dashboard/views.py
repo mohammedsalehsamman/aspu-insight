@@ -10,7 +10,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 
 from accounts.permissions import IsAdmin
 from accounts.models import User
-from research.models import ResearchPaper, MetadataQualityReport
+from research.models import ResearchPaper, MetadataQualityReport, PaperDownload
 from editorReview.models import EditorReview
 from editorReview.serializers import EditorReviewSerializer
 from assistantReview.models import AssistantReview
@@ -51,6 +51,10 @@ class AdminDashboardStatsView(APIView):
                 "total": papers_qs.count(),
                 "by_status": _counts_by(papers_qs, 'status'),
                 "submitted_last_30_days": papers_qs.filter(created_at__gte=last_30_days).count(),
+            },
+            "downloads": {
+                "total": PaperDownload.objects.count(),
+                "last_30_days": PaperDownload.objects.filter(downloaded_at__gte=last_30_days).count(),
             },
             "reviews": {
                 "editor_reviews_by_decision": _counts_by(EditorReview.objects.all(), 'decision'),

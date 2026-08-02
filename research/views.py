@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from .models import ResearchPaper, PlagiarismReport, MetadataQualityReport
+from .models import ResearchPaper, PlagiarismReport, MetadataQualityReport, PaperDownload
 from .serializers import ResearchPaperDetailSerializer, PlagiarismReportSerializer, MetadataQualityReportSerializer
 from configuration.models import JournalConfiguration
 from .service import ResearchPaperService
@@ -121,14 +121,19 @@ class ResearchPaperDownloadAPIView(APIView):
         if not paper.pdf_file:
             return Response(status=status.HTTP_404_NOT_FOUND)
         user = request.user
-        if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
+
+        def serve():
+            PaperDownload.objects.create(paper=paper, user=user if user.is_authenticated else None)
             return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
+
+        if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
+            return serve()
         config = JournalConfiguration.objects.first()
         current_mode = config.system_mode if config else 'full_open'
         if current_mode == 'full_open':
-            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
+            return serve()
         if current_mode == 'hybrid' and paper.is_paid_open_access:
-            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
+            return serve()
         return Response(status=status.HTTP_403_FORBIDDEN)
 
 class ResearchPaperPlagiarismReportView(APIView):
