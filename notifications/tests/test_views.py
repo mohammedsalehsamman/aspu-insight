@@ -3,7 +3,7 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from notifications.models import Notification
+from notifications.models import Notification, UserNotificationPreference
 from notifications.tests.helpers import make_user
 
 
@@ -74,3 +74,52 @@ class NotificationListAPITest(TestCase):
         self.assertEqual(response.data['updated'], 2)
         self.assertEqual(Notification.objects.filter(recipient=self.user, is_read=False).count(), 0)
         self.assertEqual(Notification.objects.filter(recipient=self.other_user, is_read=False).count(), 1)
+
+
+class NotificationPreferenceAPITest(TestCase):
+
+    def setUp(self):
+        self.user = make_user()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_unauthenticated_request_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(reverse('notification-preferences'))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_get_returns_effective_defaults_without_creating_rows(self):
+        response = self.client.get(reverse('notification-preferences'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), len(Notification.NotificationType.choices))
+        self.assertEqual(UserNotificationPreference.objects.filter(user=self.user).count(), 0)
+
+    def test_patch_creates_row_only_for_the_sent_type(self):
+        response = self.client.patch(
+            reverse('notification-preferences'),
+            [{'notification_type': Notification.NotificationType.PAPER_PUBLISHED, 'email_enabled': False}],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(UserNotificationPreference.objects.filter(user=self.user).count(), 1)
+        preference = UserNotificationPreference.objects.get(
+            user=self.user, notification_type=Notification.NotificationType.PAPER_PUBLISHED,
+        )
+        self.assertFalse(preference.email_enabled)
+        self.assertTrue(preference.in_app_enabled)  # لم يُرسَل، فيُحافَظ على القيمة الفعّالة الحالية
+
+    def test_cannot_disable_in_app_for_non_disableable_type(self):
+        response = self.client.patch(
+            reverse('notification-preferences'),
+            [{'notification_type': Notification.NotificationType.ROLE_CHANGED, 'in_app_enabled': False}],
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data[0]['in_app_enabled'])
+        preference = UserNotificationPreference.objects.get(
+            user=self.user, notification_type=Notification.NotificationType.ROLE_CHANGED,
+        )
+        self.assertTrue(preference.in_app_enabled)

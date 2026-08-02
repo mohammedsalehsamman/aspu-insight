@@ -6,8 +6,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from notifications.models import Notification
-from notifications.serializers import NotificationSerializer
+from notifications.models import Notification, UserNotificationPreference
+from notifications.serializers import NotificationPreferenceSerializer, NotificationSerializer
+from notifications.services import NON_DISABLEABLE_IN_APP, NotificationService
 
 
 class NotificationListAPIView(generics.ListAPIView):
@@ -51,3 +52,55 @@ class NotificationMarkAllReadAPIView(APIView):
             is_read=True, read_at=timezone.now(),
         )
         return Response({'updated': updated}, status=status.HTTP_200_OK)
+
+
+class NotificationPreferenceAPIView(APIView):
+    """تفضيلات المستخدم الحالي لكل (نوع إشعار × قناة).
+
+    القراءة تُرجع القيمة الفعّالة لكل الأنواع (افتراضي أو مخصَّص) دون إنشاء أي صف؛ الكتابة
+    تُنشئ/تُحدّث صفاً فقط للأنواع المُرسَلة فعلياً — لا صفوف افتراضية تُزرع لمجرد القراءة
+    (نفس مبدأ UserNotificationPreference الموثَّق في notifications/models.py).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @staticmethod
+    def _serialize(notification_type, channels):
+        return {
+            'notification_type': notification_type,
+            'non_disableable': notification_type in NON_DISABLEABLE_IN_APP,
+            'in_app_enabled': channels['in_app'],
+            'email_enabled': channels['email'],
+            'push_enabled': channels['push'],
+        }
+
+    def get(self, request):
+        data = [
+            self._serialize(value, NotificationService._resolve_channels(request.user, value))
+            for value, _ in Notification.NotificationType.choices
+        ]
+        return Response(data)
+
+    def patch(self, request):
+        serializer = NotificationPreferenceSerializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+
+        results = []
+        for item in serializer.validated_data:
+            notification_type = item['notification_type']
+            current = NotificationService._resolve_channels(request.user, notification_type)
+            preference, _ = UserNotificationPreference.objects.update_or_create(
+                user=request.user,
+                notification_type=notification_type,
+                defaults={
+                    'in_app_enabled': item.get('in_app_enabled', current['in_app']),
+                    'email_enabled': item.get('email_enabled', current['email']),
+                    'push_enabled': item.get('push_enabled', current['push']),
+                },
+            )
+            results.append(self._serialize(notification_type, {
+                'in_app': preference.in_app_enabled,
+                'email': preference.email_enabled,
+                'push': preference.push_enabled,
+            }))
+        return Response(results)
