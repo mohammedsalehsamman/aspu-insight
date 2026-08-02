@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 
@@ -78,6 +78,8 @@ class Notification(models.Model):
             self.is_read = True
             self.read_at = timezone.now()
             self.save(update_fields=['is_read', 'read_at'])
+            from notifications.cache import invalidate_unread_count
+            transaction.on_commit(lambda: invalidate_unread_count(self.recipient_id))
 
 
 class NotificationDelivery(models.Model):

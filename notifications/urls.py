@@ -6,6 +6,7 @@ from notifications.views import (
     NotificationMarkReadAPIView,
     NotificationMarkAllReadAPIView,
     NotificationPreferenceAPIView,
+    NotificationWSTicketAPIView,
 )
 
 urlpatterns = [
@@ -14,4 +15,5 @@ urlpatterns = [
     path('<int:pk>/read/', NotificationMarkReadAPIView.as_view(), name='notification-mark-read'),
     path('mark-all-read/', NotificationMarkAllReadAPIView.as_view(), name='notification-mark-all-read'),
     path('preferences/', NotificationPreferenceAPIView.as_view(), name='notification-preferences'),
+    path('ws-ticket/', NotificationWSTicketAPIView.as_view(), name='notification-ws-ticket'),
 ]

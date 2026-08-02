@@ -1,9 +1,10 @@
 """نقطة الكتابة الوحيدة لإنشاء الإشعارات — كل نقاط الربط (إشارات أو نداءات صريحة)
 تمر عبر NotificationService.create_notification فقط.
 
-Phase 1: يُنشئ صف Notification (in_app) فقط. من Phase 2/5 سيُستدعى هنا أيضاً إنشاء
-NotificationDelivery لكل قناة خارجية مفعّلة واستدعاء مهام Celery المقابلة عبر
-transaction.on_commit، دون تغيير في توقيع create_notification.
+create_notification ينشئ صف Notification (in_app)، ثم عبر transaction.on_commit فقط
+(لا شيء يُطلَق قبل نجاح المعاملة): NotificationDelivery + send_email_notification إن
+كانت قناة email مفعّلة، إبطال Cache عدّاد غير المقروء، ودفع نبضة push_ws_notification
+عبر WebSocket. Phase 5 يضيف نفس المنطق لقناة push الجوّال.
 """
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -125,5 +126,12 @@ class NotificationService:
             from notifications.tasks import send_email_notification
             transaction.on_commit(lambda: send_email_notification.delay(delivery.id))
 
-        # Phase 5: نفس المنطق لقناة push (DeviceToken + send_push_notification) يُضاف هنا لاحقاً.
+        # الإبطال ودفع WebSocket مؤجَّلان لِما بعد نجاح الـ commit — تراجع المعاملة يجب ألا
+        # يُطلق أي أثر خارجي (نفس المبدأ المطبَّق على البريد أعلاه).
+        from notifications.cache import invalidate_unread_count
+        from notifications.tasks import push_ws_notification
+        transaction.on_commit(lambda: invalidate_unread_count(recipient.pk))
+        transaction.on_commit(lambda: push_ws_notification.delay(notification.id))
+
+        # Phase 5: نفس منطق البريد لقناة push الجوّال (DeviceToken + send_push_notification) يُضاف هنا لاحقاً.
         return notification

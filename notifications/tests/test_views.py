@@ -1,15 +1,21 @@
+from unittest import mock
+
+from django.core.cache import cache
 from django.urls import reverse
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from notifications.cache import ws_ticket_cache_key
 from notifications.models import Notification, UserNotificationPreference
+from notifications.services import NotificationService
 from notifications.tests.helpers import make_user
 
 
 class NotificationListAPITest(TestCase):
 
     def setUp(self):
+        cache.clear()  # LocMemCache لا يُصفَّى تلقائياً بين الاختبارات كما تفعل معاملة القاعدة
         self.user = make_user()
         self.other_user = make_user()
         self.client = APIClient()
@@ -123,3 +129,96 @@ class NotificationPreferenceAPITest(TestCase):
             user=self.user, notification_type=Notification.NotificationType.ROLE_CHANGED,
         )
         self.assertTrue(preference.in_app_enabled)
+
+
+class NotificationWSTicketAPITest(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        self.user = make_user()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_unauthenticated_request_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(reverse('notification-ws-ticket'))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_issues_ticket_resolving_to_requesting_user(self):
+        response = self.client.post(reverse('notification-ws-ticket'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ticket = response.data['ticket']
+        self.assertEqual(cache.get(ws_ticket_cache_key(ticket)), self.user.pk)
+
+    def test_two_requests_issue_different_tickets(self):
+        first = self.client.post(reverse('notification-ws-ticket')).data['ticket']
+        second = self.client.post(reverse('notification-ws-ticket')).data['ticket']
+        self.assertNotEqual(first, second)
+
+
+class NotificationUnreadCountCacheTest(TestCase):
+    """يثبّت أن عدّاد غير المقروء يُقرأ من الـ Cache بين الطلبات، ويُبطَل صراحة عند كل كتابة
+    تغيّر حالة غير مقروء — لا اعتماد على TTL وحده (راجع notifications/cache.py)."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = make_user()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def _create_notification_via_service(self):
+        # push_ws_notification.delay يُجدوَل دوماً عبر on_commit، وSYSTEM_ANNOUNCEMENT فيه
+        # email=True افتراضياً فيُجدوِل send_email_notification.delay أيضاً — .delay() الحقيقي
+        # يحاول الاتصال بناقل Celery الفعلي حتى مع تنفيذ callbacks الاختبار، فنموّه الاثنين
+        # لعزل اختبار إبطال الـ Cache عن ناقل Celery (نفس نمط FullEmailDispatchTest).
+        with mock.patch('notifications.tasks.send_email_notification.delay'):
+            with mock.patch('notifications.tasks.push_ws_notification.delay'):
+                with self.captureOnCommitCallbacks(execute=True):
+                    return NotificationService.create_notification(
+                        recipient=self.user,
+                        notification_type=Notification.NotificationType.SYSTEM_ANNOUNCEMENT,
+                        context={'fallback_title': 'عنوان', 'fallback_body': 'نص'},
+                    )
+
+    def test_value_stays_cached_until_explicit_invalidation(self):
+        self._create_notification_via_service()
+        first = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(first.data['unread_count'], 1)
+
+        # إنشاء مباشر عبر الـ ORM (متجاوزاً NotificationService) — لا إبطال، فتبقى القيمة
+        # القديمة في الـ Cache حتى لو تغيّرت الحقيقة في القاعدة.
+        Notification.objects.create(
+            recipient=self.user, notification_type=Notification.NotificationType.SYSTEM_ANNOUNCEMENT,
+            title='ثانٍ', body='نص',
+        )
+        second = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(second.data['unread_count'], 1)
+
+    def test_create_notification_invalidates_cache(self):
+        self.client.get(reverse('notification-unread-count'))  # يزرع 0 في الـ Cache
+
+        self._create_notification_via_service()
+
+        response = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(response.data['unread_count'], 1)
+
+    def test_mark_all_read_invalidates_cache(self):
+        self._create_notification_via_service()
+        self.client.get(reverse('notification-unread-count'))  # يزرع 1 في الـ Cache
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(reverse('notification-mark-all-read'))
+
+        response = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(response.data['unread_count'], 0)
+
+    def test_mark_read_invalidates_cache(self):
+        notification = self._create_notification_via_service()
+        self.client.get(reverse('notification-unread-count'))  # يزرع 1 في الـ Cache
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(reverse('notification-mark-read', args=[notification.pk]))
+
+        response = self.client.get(reverse('notification-unread-count'))
+        self.assertEqual(response.data['unread_count'], 0)

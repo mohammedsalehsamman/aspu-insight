@@ -12,6 +12,10 @@ DEBUG = False
 ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 INSTALLED_APPS = [
+    # daphne يجب أن يبقى أول عنصر — هو ما يجعل manage.py runserver يخدم ASGI (WebSocket)
+    # بدل WSGI العادي وحدها؛ راجع aspu_insight/asgi.py وnotifications/consumers.py.
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -68,6 +72,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'aspu_insight.wsgi.application'
+ASGI_APPLICATION = 'aspu_insight.asgi.application'
 
 DATABASES = {
     'default': {
@@ -238,6 +243,33 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+
+# نفس نمط CELERY_BROKER_URL أعلاه بالضبط: لا Redis محلياً افتراضياً، والتبديل إليه فور توفره
+# عبر متغير بيئة واحد دون أي تعديل كود. فارغ = طبقة القنوات والـ Cache تبقيان في-الذاكرة
+# (عملية واحدة فقط — كافٍ لتطوير محلي بعملية runserver واحدة، لا يصلح لعدة Workers).
+REDIS_URL = config('REDIS_URL', default='')
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_URL]},
+        },
+    }
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
+    }
+    CACHES = {
+        'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    }
 
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {

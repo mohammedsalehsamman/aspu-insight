@@ -1,3 +1,7 @@
+import secrets
+
+from django.core.cache import cache
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -6,6 +10,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from notifications.cache import (
+    UNREAD_COUNT_TIMEOUT,
+    WS_TICKET_TIMEOUT,
+    invalidate_unread_count,
+    unread_count_cache_key,
+    ws_ticket_cache_key,
+)
 from notifications.models import Notification, UserNotificationPreference
 from notifications.serializers import NotificationPreferenceSerializer, NotificationSerializer
 from notifications.services import NON_DISABLEABLE_IN_APP, NotificationService
@@ -31,7 +42,11 @@ class NotificationUnreadCountAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+        key = unread_count_cache_key(request.user.pk)
+        count = cache.get(key)
+        if count is None:
+            count = Notification.objects.filter(recipient=request.user, is_read=False).count()
+            cache.set(key, count, UNREAD_COUNT_TIMEOUT)
         return Response({'unread_count': count})
 
 
@@ -51,6 +66,7 @@ class NotificationMarkAllReadAPIView(APIView):
         updated = Notification.objects.filter(recipient=request.user, is_read=False).update(
             is_read=True, read_at=timezone.now(),
         )
+        transaction.on_commit(lambda: invalidate_unread_count(request.user.pk))
         return Response({'updated': updated}, status=status.HTTP_200_OK)
 
 
@@ -104,3 +120,17 @@ class NotificationPreferenceAPIView(APIView):
                 'push': preference.push_enabled,
             }))
         return Response(results)
+
+
+class NotificationWSTicketAPIView(APIView):
+    """يصدر تذكرة اتصال WebSocket أحادية الاستخدام قصيرة الأجل (٣٠ ثانية)، بدل تمرير JWT
+    كامل الصلاحية داخل رابط wss://‎ حيث يظهر في سجلات الخوادم الوسيطة والمتصفح. العميل يفتح
+    الاتصال بـ ws(s)://.../ws/notifications/?ticket=<ticket> فور استلامها.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ticket = secrets.token_urlsafe(32)
+        cache.set(ws_ticket_cache_key(ticket), request.user.pk, WS_TICKET_TIMEOUT)
+        return Response({'ticket': ticket, 'expires_in': WS_TICKET_TIMEOUT})
