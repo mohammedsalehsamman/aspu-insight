@@ -43,7 +43,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name = 'User'
         verbose_name_plural = 'Users'
 
-    def str(self):
+    def __str__(self):
         return f"{self.full_name} <{self.email}>"
 
     def generate_2fa_secret(self):
@@ -97,5 +97,5 @@ class PasswordResetToken(models.Model):
     def is_valid(self):
         return not self.is_used and self.expires_at > timezone.now()
 
-    def str(self):
+    def __str__(self):
         return f"Token for {self.user.email} [{self.token_type}]"
