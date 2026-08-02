@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from notifications.models import Notification
+from notifications.models import DeviceToken, Notification
 from notifications.services import NON_DISABLEABLE_IN_APP
 
 
@@ -43,3 +43,12 @@ class NotificationPreferenceSerializer(serializers.Serializer):
         if attrs.get('notification_type') in NON_DISABLEABLE_IN_APP:
             attrs['in_app_enabled'] = True
         return attrs
+
+
+class DeviceTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DeviceToken
+        fields = ['token', 'platform']
+        # بلا UniqueValidator التلقائي لـ token: إعادة تسجيل رمز موجود مقصودة (إعادة ربطه
+        # بمستخدم آخر عبر update_or_create في DeviceTokenAPIView)، لا خطأ يُرفَض.
+        extra_kwargs = {'token': {'validators': []}}

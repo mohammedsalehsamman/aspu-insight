@@ -2,6 +2,7 @@ import secrets
 
 from django.core.cache import cache
 from django.db import transaction
+from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -17,8 +18,12 @@ from notifications.cache import (
     unread_count_cache_key,
     ws_ticket_cache_key,
 )
-from notifications.models import Notification, UserNotificationPreference
-from notifications.serializers import NotificationPreferenceSerializer, NotificationSerializer
+from notifications.models import DeviceToken, Notification, UserNotificationPreference
+from notifications.serializers import (
+    DeviceTokenSerializer,
+    NotificationPreferenceSerializer,
+    NotificationSerializer,
+)
 from notifications.services import NON_DISABLEABLE_IN_APP, NotificationService
 
 
@@ -36,6 +41,41 @@ class NotificationListAPIView(generics.ListAPIView):
             .filter(recipient=self.request.user)
             .select_related('actor', 'target_content_type')
         )
+
+
+class NotificationGroupedListAPIView(APIView):
+    """تجميع وقت القراءة عبر group_key (Phase 6) — كل حدث يبقى صفاً مستقلاً في Notification
+    (لا دمج وقت الكتابة، راجع القرار في خطة الإشعارات)؛ هذه النقطة فقط تعرض لكل مجموعة أحدث
+    إشعار فيها + عدد إشعاراتها الكلي وغير المقروء. group_key الفارغ (لا نوع/هدف مشترك حقيقي)
+    يُستبعَد من التجميع."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        groups = (
+            Notification.objects
+            .filter(recipient=request.user)
+            .exclude(group_key='')
+            .values('group_key')
+            .annotate(latest_id=Max('id'), count=Count('id'), unread_count=Count('id', filter=Q(is_read=False)))
+        )
+        counts_by_latest_id = {row['latest_id']: row for row in groups}
+
+        notifications = (
+            Notification.objects
+            .filter(id__in=counts_by_latest_id.keys())
+            .select_related('actor', 'target_content_type')
+        )
+        results = []
+        for notification in notifications:
+            row = counts_by_latest_id[notification.id]
+            data = NotificationSerializer(notification).data
+            data['count'] = row['count']
+            data['unread_count'] = row['unread_count']
+            results.append(data)
+
+        results.sort(key=lambda d: d['created_at'], reverse=True)
+        return Response(results)
 
 
 class NotificationUnreadCountAPIView(APIView):
@@ -134,3 +174,36 @@ class NotificationWSTicketAPIView(APIView):
         ticket = secrets.token_urlsafe(32)
         cache.set(ws_ticket_cache_key(ticket), request.user.pk, WS_TICKET_TIMEOUT)
         return Response({'ticket': ticket, 'expires_in': WS_TICKET_TIMEOUT})
+
+
+class DeviceTokenAPIView(APIView):
+    """تسجيل/إلغاء رمز جهاز لإشعارات push — Phase 5 (تصميم استشرافي، لا تطبيق جوال فعلي
+    يستهلكها اليوم). التسجيل يُعيد ربط الرمز بالمستخدم الحالي دوماً (update_or_create) — نفس
+    جهاز الجوال قد يُستخدم من حساب آخر لاحقاً (تسجيل خروج/دخول)، والرمز نفسه لا يتغيّر."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = DeviceTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        device_token, _ = DeviceToken.objects.update_or_create(
+            token=serializer.validated_data['token'],
+            defaults={
+                'user': request.user,
+                'platform': serializer.validated_data['platform'],
+                'is_active': True,
+                'last_used_at': timezone.now(),
+            },
+        )
+        return Response(DeviceTokenSerializer(device_token).data, status=status.HTTP_201_CREATED)
+
+    def delete(self, request):
+        token = request.data.get('token')
+        if not token:
+            return Response({'detail': 'token مطلوب.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        deleted, _ = DeviceToken.objects.filter(user=request.user, token=token).delete()
+        if not deleted:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)

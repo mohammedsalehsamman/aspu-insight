@@ -281,6 +281,16 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.check_committee_deadlines_approaching',
         'schedule': crontab(hour=6, minute=0),
     },
+    'send-daily-notification-digest': {
+        'task': 'notifications.tasks.send_daily_notification_digest',
+        'schedule': crontab(hour=7, minute=0),
+    },
+    'cleanup-old-read-notifications-weekly': {
+        'task': 'notifications.tasks.cleanup_old_read_notifications',
+        'schedule': crontab(hour=3, minute=0, day_of_week=0),
+    },
 }
 
 COMMITTEE_DEADLINE_DAYS = 15
+
+FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')

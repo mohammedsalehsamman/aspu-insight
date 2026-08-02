@@ -103,6 +103,12 @@ class NotificationDelivery(models.Model):
     channel = models.CharField(max_length=10, choices=Channel.choices)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
 
+    # فارغ لقناة email (مستلم واحد من User.email). لقناة push: جهاز واحد بعينه — يمكن أن
+    # يملك المستخدم عدة أجهزة، فصف تسليم واحد لكل (إشعار × جهاز)، لا لكل (إشعار × مستخدم).
+    device_token = models.ForeignKey(
+        'notifications.DeviceToken', on_delete=models.SET_NULL, null=True, blank=True, related_name='deliveries',
+    )
+
     # مصيَّران مرة واحدة وقت إنشاء الإشعار (نفس مبدأ in_app) — تعديل القالب لاحقاً لا يغيّر رسائل جاهزة للإرسال.
     rendered_subject = models.CharField(max_length=255, blank=True, default='')
     rendered_body = models.TextField(blank=True, default='')

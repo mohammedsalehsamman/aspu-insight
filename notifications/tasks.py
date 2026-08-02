@@ -8,6 +8,8 @@ from channels.layers import get_channel_layer
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
+from firebase_admin.exceptions import FirebaseError
+from firebase_admin.messaging import UnregisteredError
 
 from notifications.models import NotificationDelivery
 
@@ -48,6 +50,72 @@ def send_email_notification(self, delivery_id):
     delivery.status = NotificationDelivery.Status.SENT
     delivery.sent_at = timezone.now()
     delivery.save(update_fields=['attempt_count', 'last_attempted_at', 'status', 'sent_at'])
+
+
+def _get_firebase_app():
+    import firebase_admin
+    from firebase_admin import credentials
+
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        return firebase_admin.initialize_app(credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH))
+
+
+@shared_task(autoretry_for=(FirebaseError,), retry_backoff=True, retry_backoff_max=600, max_retries=5)
+def send_push_notification(delivery_id):
+    """يرسل عبر Firebase Cloud Messaging (HTTP v1) — تصميم استشرافي (Phase 5)، لا تطبيق
+    جوال فعلي يستهلكه اليوم فلا يمكن اختباره من طرف-إلى-طرف؛ يُختبَر بمحاكاة استدعاء FCM فقط.
+    بلا FIREBASE_CREDENTIALS_PATH: يتخلّى فوراً (GIVEN_UP) دون أي محاولة اتصال. UnregisteredError
+    (الرمز لم يعد صالحاً) ليست ضمن autoretry_for عمداً — تُعامَل كفشل نهائي أدناه، لا مؤقت."""
+    try:
+        delivery = NotificationDelivery.objects.select_related('device_token').get(pk=delivery_id)
+    except NotificationDelivery.DoesNotExist:
+        logger.warning("NotificationDelivery %s not found; skipping push.", delivery_id)
+        return
+    if delivery.status == NotificationDelivery.Status.SENT:
+        return  # ضمان عدم التكرار الحقيقي (DB) — نفس مبدأ send_email_notification
+
+    if not settings.FIREBASE_CREDENTIALS_PATH:
+        delivery.status = NotificationDelivery.Status.GIVEN_UP
+        delivery.error_message = 'FIREBASE_CREDENTIALS_PATH غير مضبوط.'
+        delivery.save(update_fields=['status', 'error_message'])
+        return
+
+    from firebase_admin import messaging
+
+    delivery.attempt_count += 1
+    delivery.last_attempted_at = timezone.now()
+    message = messaging.Message(
+        notification=messaging.Notification(title=delivery.rendered_subject, body=delivery.rendered_body),
+        data={'notification_id': str(delivery.notification_id)},
+        token=delivery.device_token.token,
+    )
+    try:
+        _get_firebase_app()
+        provider_message_id = messaging.send(message)
+    except UnregisteredError as exc:
+        # الرمز لم يعد صالحاً على جهاز المستخدم — يُعطَّل لا يُحذف (نفس نمط PasswordResetToken.is_used).
+        delivery.device_token.is_active = False
+        delivery.device_token.save(update_fields=['is_active'])
+        delivery.status = NotificationDelivery.Status.GIVEN_UP
+        delivery.error_message = f"رمز غير مسجَّل، عُطِّل الجهاز: {exc}"
+        delivery.save(update_fields=['attempt_count', 'last_attempted_at', 'status', 'error_message'])
+        return
+    except Exception as exc:
+        delivery.status = (
+            NotificationDelivery.Status.GIVEN_UP
+            if delivery.attempt_count >= delivery.max_attempts
+            else NotificationDelivery.Status.RETRYING
+        )
+        delivery.error_message = str(exc)
+        delivery.save(update_fields=['attempt_count', 'last_attempted_at', 'status', 'error_message'])
+        raise
+
+    delivery.status = NotificationDelivery.Status.SENT
+    delivery.sent_at = timezone.now()
+    delivery.provider_message_id = provider_message_id
+    delivery.save(update_fields=['attempt_count', 'last_attempted_at', 'status', 'sent_at', 'provider_message_id'])
 
 
 @shared_task
@@ -116,3 +184,51 @@ def check_committee_deadlines_approaching():
                 'fallback_body': f"يقترب الموعد النهائي للجنة تحكيم البحث: {committee.paper.title}",
             },
         )
+
+
+@shared_task
+def send_daily_notification_digest():
+    """ملخص بريدي اختياري (Phase 6) — إشعار واحد مجمَّع بدل مضايقة المستخدم بعدد كبير من
+    رسائل فردية. لا يمرّ عبر NotificationDelivery/NotificationTemplate (ليس نوع إشعار،
+    بل تلخيص عبر البريد مباشرة)، ولا يتأثر بتفضيل email لكل نوع — قرار تبسيط متعمَّد؛
+    أول من يستفيد فعلياً حين يبني تطبيق الجوال مستقبلاً هو من يستحق ضبطاً أدق لهذا التمييز."""
+    from django.contrib.auth import get_user_model
+    from notifications.models import Notification
+
+    User = get_user_model()
+    since = timezone.now() - timedelta(days=1)
+
+    recipient_ids = (
+        Notification.objects.filter(created_at__gte=since, is_read=False)
+        .values_list('recipient_id', flat=True).distinct()
+    )
+    sent = 0
+    for user in User.objects.filter(pk__in=recipient_ids, is_active=True):
+        unread = Notification.objects.filter(
+            recipient=user, created_at__gte=since, is_read=False,
+        ).order_by('-created_at')
+        lines = [f"- {n.title}" for n in unread[:20]]
+        body = "لديك {} إشعاراً جديداً خلال آخر 24 ساعة:\n\n{}\n\nفريق ASPU Insight".format(
+            unread.count(), "\n".join(lines),
+        )
+        send_mail(
+            subject='ملخص إشعاراتك اليومي - ASPU Insight',
+            message=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+        sent += 1
+    return sent
+
+
+@shared_task
+def cleanup_old_read_notifications(retention_days=90):
+    """تنظيف دوري (Phase 6) — الإشعارات المقروءة الأقدم من retention_days تُحذف نهائياً
+    (لا تعطيل/أرشفة: هي سجل تنبيه مقروء بالفعل، على عكس ResearchHistory الذي هو سجل تدقيق
+    دائم). لا يمسّ NotificationDelivery المرتبط (CASCADE مع Notification نفسه)."""
+    from notifications.models import Notification
+
+    cutoff = timezone.now() - timedelta(days=retention_days)
+    deleted_count, _ = Notification.objects.filter(is_read=True, read_at__lt=cutoff).delete()
+    return deleted_count

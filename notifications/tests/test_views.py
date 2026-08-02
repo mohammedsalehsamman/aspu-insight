@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from notifications.cache import ws_ticket_cache_key
-from notifications.models import Notification, UserNotificationPreference
+from notifications.models import DeviceToken, Notification, UserNotificationPreference
 from notifications.services import NotificationService
 from notifications.tests.helpers import make_user
 
@@ -80,6 +80,62 @@ class NotificationListAPITest(TestCase):
         self.assertEqual(response.data['updated'], 2)
         self.assertEqual(Notification.objects.filter(recipient=self.user, is_read=False).count(), 0)
         self.assertEqual(Notification.objects.filter(recipient=self.other_user, is_read=False).count(), 1)
+
+
+class NotificationGroupedListAPITest(TestCase):
+    """تجميع وقت القراءة عبر group_key (Phase 6) — لا دمج وقت الكتابة، كل صف Notification
+    يبقى مستقلاً؛ هذه النقطة فقط تعرض ملخصاً لكل مجموعة."""
+
+    def setUp(self):
+        self.user = make_user()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_unauthenticated_request_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get(reverse('notification-grouped-list'))
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_groups_notifications_sharing_group_key(self):
+        for i in range(3):
+            Notification.objects.create(
+                recipient=self.user, notification_type=Notification.NotificationType.ROLE_CHANGED,
+                title=f"تغيير {i}", body='نص', group_key='role_changed:1:1', is_read=(i == 0),
+            )
+        Notification.objects.create(
+            recipient=self.user, notification_type=Notification.NotificationType.SYSTEM_ANNOUNCEMENT,
+            title='إعلان', body='نص', group_key='system_announcement:0:0',
+        )
+
+        response = self.client.get(reverse('notification-grouped-list'))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 2)
+        role_group = next(g for g in response.data if g['group_key'] == 'role_changed:1:1')
+        self.assertEqual(role_group['count'], 3)
+        self.assertEqual(role_group['unread_count'], 2)
+        self.assertEqual(role_group['title'], 'تغيير 2')  # أحدث إشعار في المجموعة
+
+    def test_excludes_empty_group_key(self):
+        Notification.objects.create(
+            recipient=self.user, notification_type=Notification.NotificationType.SYSTEM_ANNOUNCEMENT,
+            title='بلا مجموعة', body='نص', group_key='',
+        )
+
+        response = self.client.get(reverse('notification-grouped-list'))
+
+        self.assertEqual(response.data, [])
+
+    def test_only_returns_own_notifications(self):
+        other_user = make_user()
+        Notification.objects.create(
+            recipient=other_user, notification_type=Notification.NotificationType.SYSTEM_ANNOUNCEMENT,
+            title='لغيري', body='نص', group_key='system_announcement:0:0',
+        )
+
+        response = self.client.get(reverse('notification-grouped-list'))
+
+        self.assertEqual(response.data, [])
 
 
 class NotificationPreferenceAPITest(TestCase):
@@ -222,3 +278,62 @@ class NotificationUnreadCountCacheTest(TestCase):
 
         response = self.client.get(reverse('notification-unread-count'))
         self.assertEqual(response.data['unread_count'], 0)
+
+
+class DeviceTokenAPITest(TestCase):
+
+    def setUp(self):
+        self.user = make_user()
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_unauthenticated_request_rejected(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.post(reverse('notification-device-tokens'), {'token': 'x', 'platform': 'web'})
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_register_creates_active_token_for_current_user(self):
+        response = self.client.post(
+            reverse('notification-device-tokens'), {'token': 'abc123', 'platform': 'android'},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        device_token = DeviceToken.objects.get(token='abc123')
+        self.assertEqual(device_token.user, self.user)
+        self.assertTrue(device_token.is_active)
+
+    def test_registering_same_token_reassigns_to_new_user(self):
+        """جهاز واحد قد يُستخدم من حساب آخر لاحقاً (تسجيل خروج/دخول) — الرمز نفسه لا يتغيّر."""
+        previous_owner = make_user()
+        DeviceToken.objects.create(user=previous_owner, token='shared-device', platform='ios', is_active=False)
+
+        response = self.client.post(
+            reverse('notification-device-tokens'), {'token': 'shared-device', 'platform': 'ios'},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(DeviceToken.objects.filter(token='shared-device').count(), 1)
+        device_token = DeviceToken.objects.get(token='shared-device')
+        self.assertEqual(device_token.user, self.user)
+        self.assertTrue(device_token.is_active)
+
+    def test_delete_removes_own_token(self):
+        DeviceToken.objects.create(user=self.user, token='mine', platform='web')
+
+        response = self.client.delete(reverse('notification-device-tokens'), {'token': 'mine'}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(DeviceToken.objects.filter(token='mine').exists())
+
+    def test_cannot_delete_another_users_token(self):
+        other_user = make_user()
+        DeviceToken.objects.create(user=other_user, token='not-mine', platform='web')
+
+        response = self.client.delete(reverse('notification-device-tokens'), {'token': 'not-mine'}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(DeviceToken.objects.filter(token='not-mine').exists())
+
+    def test_delete_without_token_is_bad_request(self):
+        response = self.client.delete(reverse('notification-device-tokens'), {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
