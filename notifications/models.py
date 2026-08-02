@@ -101,6 +101,10 @@ class NotificationDelivery(models.Model):
     channel = models.CharField(max_length=10, choices=Channel.choices)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
 
+    # مصيَّران مرة واحدة وقت إنشاء الإشعار (نفس مبدأ in_app) — تعديل القالب لاحقاً لا يغيّر رسائل جاهزة للإرسال.
+    rendered_subject = models.CharField(max_length=255, blank=True, default='')
+    rendered_body = models.TextField(blank=True, default='')
+
     attempt_count = models.PositiveSmallIntegerField(default=0)
     max_attempts = models.PositiveSmallIntegerField(default=5)
     last_attempted_at = models.DateTimeField(null=True, blank=True)

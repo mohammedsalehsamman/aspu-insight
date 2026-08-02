@@ -245,6 +245,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'committees.tasks.check_committee_deadlines',
         'schedule': crontab(hour=0, minute=0),
     },
+    'check-committee-deadlines-approaching-daily': {
+        'task': 'notifications.tasks.check_committee_deadlines_approaching',
+        'schedule': crontab(hour=6, minute=0),
+    },
 }
 
 COMMITTEE_DEADLINE_DAYS = 15

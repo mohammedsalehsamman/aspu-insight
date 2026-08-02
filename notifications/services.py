@@ -9,7 +9,12 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.template import Context, Template
 
-from notifications.models import Notification, NotificationTemplate, UserNotificationPreference
+from notifications.models import (
+    Notification,
+    NotificationDelivery,
+    NotificationTemplate,
+    UserNotificationPreference,
+)
 
 # الافتراضي لأي نوع غير مذكور هنا: in_app فقط (email/push معطّلان).
 DEFAULT_CHANNELS_BY_TYPE = {
@@ -106,6 +111,19 @@ class NotificationService:
             target_repr=target_repr,
             group_key=f"{notification_type}:{content_type.id if content_type else 0}:{target_id or 0}",
         )
-        # Phase 2/5: إنشاء NotificationDelivery لكل قناة خارجية مفعّلة + استدعاء مهام Celery
-        # عبر transaction.on_commit هنا، دون تغيير في الواجهة العامة لهذه الدالة.
+
+        if channels['email']:
+            subject, body = NotificationService._render(notification_type, 'email', language, context)
+            delivery = NotificationDelivery.objects.create(
+                notification=notification,
+                channel=NotificationDelivery.Channel.EMAIL,
+                rendered_subject=subject,
+                rendered_body=body,
+                idempotency_key=f"{notification.id}:email",
+            )
+            # استيراد متأخر لتفادي استيراد دائري بين services.py وtasks.py
+            from notifications.tasks import send_email_notification
+            transaction.on_commit(lambda: send_email_notification.delay(delivery.id))
+
+        # Phase 5: نفس المنطق لقناة push (DeviceToken + send_push_notification) يُضاف هنا لاحقاً.
         return notification

@@ -1,11 +1,16 @@
+from datetime import timedelta
+
+from django.core import mail
 from django.urls import reverse
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.serializers import UserUpdateSerializer
 from assistantReview.models import AssistantReview
 from assistantReview.services import AssistantReviewService
+from committees.models import Committee, CommitteeMember
 from committees.services import CommitteeService
 from notifications.models import Notification
 from notifications.tests.helpers import make_paper, make_user
@@ -125,3 +130,87 @@ class RoleChangeSignalTest(TestCase):
 
         notification = Notification.objects.get(recipient=user)
         self.assertEqual(notification.notification_type, Notification.NotificationType.ROLE_CHANGED)
+
+
+class CommitteeReviewDecisionTest(TestCase):
+    """يثبّت الربط الفعلي في CommitteeService.submit_review_decision (Phase 2)."""
+
+    def test_notification_fires_only_once_all_members_voted(self):
+        editor = make_user(role='editor')
+        author = make_user(role='author')
+        paper = make_paper(author=author)
+        committee = Committee.objects.create(
+            paper=paper, editor=editor, status='approved', blinding_type='single_blind',
+        )
+        reviewers = [make_user(role='reviewer') for _ in range(3)]
+        members = [
+            CommitteeMember.objects.create(
+                committee=committee, user=r, role='primary', is_substitute=False, is_approved=True,
+            )
+            for r in reviewers
+        ]
+
+        CommitteeService.submit_review_decision(reviewers[0], members[0].id, 'accept_paper', '')
+        self.assertEqual(Notification.objects.filter(recipient__in=[author, editor]).count(), 0)
+
+        CommitteeService.submit_review_decision(reviewers[1], members[1].id, 'accept_paper', '')
+        self.assertEqual(Notification.objects.filter(recipient__in=[author, editor]).count(), 0)
+
+        CommitteeService.submit_review_decision(reviewers[2], members[2].id, 'reject_paper', '')
+        committee.refresh_from_db()
+        self.assertEqual(committee.status, 'accepted')
+        for recipient in (author, editor):
+            notification = Notification.objects.get(
+                recipient=recipient, notification_type=Notification.NotificationType.COMMITTEE_REVIEW_RECEIVED,
+            )
+            self.assertEqual(notification.target_object_id, committee.id)
+
+
+class CommitteeExpirySignalTest(TestCase):
+    """يثبّت أن انتهاء مهلة اللجنة يُشعِر المحرر عبر النظام الموحّد، لا البريد اليدوي القديم (محذوف)."""
+
+    def test_expired_committee_notifies_editor(self):
+        editor = make_user(role='editor')
+        paper = make_paper()
+        committee = Committee.objects.create(
+            paper=paper, editor=editor, status='pending', blinding_type='single_blind',
+            deadline=timezone.now() - timedelta(days=1),
+        )
+
+        CommitteeService.expire_overdue_committees()
+
+        committee.refresh_from_db()
+        self.assertEqual(committee.status, 'expired')
+        notification = Notification.objects.get(
+            recipient=editor, notification_type=Notification.NotificationType.COMMITTEE_DEADLINE_EXPIRED,
+        )
+        self.assertEqual(notification.target_object_id, committee.id)
+        # الإرسال الفعلي عبر Celery مؤجَّل لـ transaction.on_commit ولا يُنفَّذ داخل TestCase
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class SubstituteInvitationSignalTest(TestCase):
+    """يثبّت أن اعتذار عضو أساسي يُشعِر البديل عبر النظام الموحّد، لا البريد اليدوي القديم (محذوف)."""
+
+    def test_declining_member_notifies_substitute(self):
+        editor = make_user(role='editor')
+        paper = make_paper()
+        committee = Committee.objects.create(
+            paper=paper, editor=editor, status='pending', blinding_type='single_blind',
+        )
+        primary_reviewer = make_user(role='reviewer')
+        substitute_reviewer = make_user(role='reviewer')
+        primary_member = CommitteeMember.objects.create(
+            committee=committee, user=primary_reviewer, role='primary', is_substitute=False, is_approved=True,
+        )
+        CommitteeMember.objects.create(
+            committee=committee, user=substitute_reviewer, role='substitute', is_substitute=True, is_approved=None,
+        )
+
+        CommitteeService.handle_reviewer_response(primary_reviewer, primary_member.id, False)
+
+        notification = Notification.objects.get(
+            recipient=substitute_reviewer,
+            notification_type=Notification.NotificationType.REVIEWER_ASSIGNED_TO_COMMITTEE,
+        )
+        self.assertEqual(notification.target_object_id, committee.id)

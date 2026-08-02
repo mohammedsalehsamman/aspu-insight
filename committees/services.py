@@ -1,10 +1,10 @@
 import logging
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from committees.models import Committee, CommitteeMember
-from committees.utils import send_committee_expiry_email, send_substitute_invitation_email
 from research.models import ResearchPaper
 from notifications.models import Notification
 from notifications.services import NotificationService
@@ -177,7 +177,17 @@ class CommitteeService:
                         is_approved=None
                     ).first()
                     if substitute:
-                        send_substitute_invitation_email(substitute)
+                        NotificationService.create_notification(
+                            recipient=substitute.user,
+                            notification_type=Notification.NotificationType.REVIEWER_ASSIGNED_TO_COMMITTEE,
+                            target=committee,
+                            target_repr=committee.paper.title,
+                            context={
+                                'paper_title': committee.paper.title,
+                                'fallback_title': 'دعوة للانضمام كمحكم بديل',
+                                'fallback_body': f"أحد الأعضاء اعتذر، وأنت مرشح كعضو بديل في لجنة تحكيم البحث: {committee.paper.title}",
+                            },
+                        )
                 member.save()
 
             elif is_approved is True:
@@ -254,6 +264,24 @@ class CommitteeService:
                 committee.status = 'revision'
 
             committee.save()
+            CommitteeService._notify_committee_decision(committee, actor=user)
+
+    @staticmethod
+    def _notify_committee_decision(committee, actor=None):
+        for recipient in {committee.paper.author, committee.editor}:
+            NotificationService.create_notification(
+                recipient=recipient,
+                notification_type=Notification.NotificationType.COMMITTEE_REVIEW_RECEIVED,
+                actor=actor,
+                target=committee,
+                target_repr=committee.paper.title,
+                context={
+                    'paper_title': committee.paper.title,
+                    'committee_status': committee.status,
+                    'fallback_title': 'قرار لجنة التحكيم',
+                    'fallback_body': f"صدر قرار لجنة تحكيم البحث: {committee.paper.title}.",
+                },
+            )
 
     @staticmethod
     def _try_force_decision(committee):
@@ -277,6 +305,7 @@ class CommitteeService:
             return False
 
         committee.save()
+        CommitteeService._notify_committee_decision(committee)
         return True
 
     @staticmethod
@@ -295,7 +324,22 @@ class CommitteeService:
                 if not CommitteeService._try_force_decision(committee):
                     committee.status = 'expired'
                     committee.save()
-                    send_committee_expiry_email(committee)
+                    NotificationService.create_notification(
+                        recipient=committee.editor,
+                        notification_type=Notification.NotificationType.COMMITTEE_DEADLINE_EXPIRED,
+                        target=committee,
+                        target_repr=committee.paper.title,
+                        level=Notification.Level.WARNING,
+                        context={
+                            'paper_title': committee.paper.title,
+                            'deadline_days': getattr(settings, 'COMMITTEE_DEADLINE_DAYS', 15),
+                            'fallback_title': 'انتهت مهلة اللجنة',
+                            'fallback_body': (
+                                f"انتهت مهلة لجنة تحكيم البحث \"{committee.paper.title}\" بلا قرار نهائي. "
+                                "يمكنك تعيين لجنة جديدة."
+                            ),
+                        },
+                    )
 
     @staticmethod
     def get_research_paper_details(user, paper_id):
