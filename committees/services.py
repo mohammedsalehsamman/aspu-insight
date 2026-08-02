@@ -6,6 +6,8 @@ from rest_framework.exceptions import ValidationError, PermissionDenied, NotFoun
 from committees.models import Committee, CommitteeMember
 from committees.utils import send_committee_expiry_email, send_substitute_invitation_email
 from research.models import ResearchPaper
+from notifications.models import Notification
+from notifications.services import NotificationService
 
 try:
     from ai_service.services.reviewer_recommendation import AIReviewerMatcherService
@@ -112,6 +114,22 @@ class CommitteeService:
                     for u_id in substitute_ids
                 ]
             ])
+
+            # bulk_create لا يُطلق post_save إطلاقاً، فالربط هنا يجب أن يكون نداءً صريحاً لا إشارة.
+            users_by_id = {u.user_id: u for u in users}
+            for u_id in primary_ids + substitute_ids:
+                NotificationService.create_notification(
+                    recipient=users_by_id[u_id],
+                    notification_type=Notification.NotificationType.REVIEWER_ASSIGNED_TO_COMMITTEE,
+                    actor=user,
+                    target=committee,
+                    target_repr=paper.title,
+                    context={
+                        'paper_title': paper.title,
+                        'fallback_title': 'تعيينك في لجنة تحكيم',
+                        'fallback_body': f"تم تعيينك محكماً في لجنة تحكيم البحث: {paper.title}",
+                    },
+                )
 
         return committee
 

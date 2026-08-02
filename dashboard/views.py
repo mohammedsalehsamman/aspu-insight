@@ -18,6 +18,8 @@ from assistantReview.serializers import AssistantReviewSerializer
 from committees.models import Committee
 from committees.serializers import CommitteeDetailsSerializer
 from ai_service.models import IEEECheckReport, ClaimEvidenceGraphReport
+from notifications.models import Notification
+from notifications.services import NotificationService
 
 from dashboard.serializers import (
     AdminResearchPaperSerializer,
@@ -104,6 +106,21 @@ class AdminAssignEditorView(APIView):
             paper.assigned_editor = editor
 
         paper.save(update_fields=['assigned_editor'])
+
+        if editor_id is not None:
+            NotificationService.create_notification(
+                recipient=editor,
+                notification_type=Notification.NotificationType.EDITOR_ASSIGNED,
+                actor=request.user,
+                target=paper,
+                target_repr=paper.title,
+                context={
+                    'paper_title': paper.title,
+                    'fallback_title': 'تم تعيينك محرراً لبحث',
+                    'fallback_body': f"تم تعيينك محرراً مسؤولاً عن البحث: {paper.title}",
+                },
+            )
+
         return Response(AdminResearchPaperSerializer(paper).data)
 
 class AdminEditorReviewListView(generics.ListAPIView):
