@@ -2,16 +2,24 @@ import os
 from datetime import timedelta
 from pathlib import Path
 from decouple import config, Csv
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production')
 
-DEBUG = False
+DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+if not DEBUG and SECRET_KEY == 'django-insecure-change-me-in-production':
+    raise ImproperlyConfigured('يجب ضبط SECRET_KEY عبر متغير بيئة حقيقي عند DEBUG=False.')
+
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 INSTALLED_APPS = [
+    # daphne يجب أن يبقى أول عنصر — هو ما يجعل manage.py runserver يخدم ASGI (WebSocket)
+    # بدل WSGI العادي وحدها؛ راجع aspu_insight/asgi.py وnotifications/consumers.py.
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -68,11 +76,16 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'aspu_insight.wsgi.application'
+ASGI_APPLICATION = 'aspu_insight.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': config('DB_ENGINE', default='django.db.backends.sqlite3'),
+        'NAME': config('DB_NAME', default=str(BASE_DIR / 'db.sqlite3')),
+        'USER': config('DB_USER', default=''),
+        'PASSWORD': config('DB_PASSWORD', default=''),
+        'HOST': config('DB_HOST', default=''),
+        'PORT': config('DB_PORT', default=''),
     }
 }
 
@@ -128,6 +141,27 @@ FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default=FRONTEND_URL, cast=Csv())
 CORS_ALLOW_CREDENTIALS = True
+
+# ─── فرض HTTPS للإنتاج ──────────────────────────────────────────────
+# SECURE_PRODUCTION=True (تُفعَّل يدوياً فقط بعد تجهيز شهادة SSL فعلية على
+# الدومين) تفرض كل حماية HTTPS/HSTS دفعة واحدة. القيمة الافتراضية False في
+# كل مكان تحافظ على عمل التطوير المحلي والاختبارات دون أي تغيير، لأن DEBUG
+# في هذا المشروع False أصلاً محلياً — لا يصح ربط هذه الإعدادات بـ not DEBUG.
+SECURE_PRODUCTION = config('SECURE_PRODUCTION', default=False, cast=bool)
+
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=SECURE_PRODUCTION, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=SECURE_PRODUCTION, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=SECURE_PRODUCTION, cast=bool)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000 if SECURE_PRODUCTION else 0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=SECURE_PRODUCTION, cast=bool)
+SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=SECURE_PRODUCTION, cast=bool)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
+# فقط عند وجود وكيل عكسي حقيقي (Nginx) يُنهي TLS ويمرّر X-Forwarded-Proto —
+# تفعيلها بدون وكيل فعلي يفتح ثغرة انتحال هذه الترويسة من المستخدم مباشرة.
+if config('BEHIND_HTTPS_PROXY', default=False, cast=bool):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -265,12 +299,53 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# نفس نمط CELERY_BROKER_URL أعلاه بالضبط: لا Redis محلياً افتراضياً، والتبديل إليه فور توفره
+# عبر متغير بيئة واحد دون أي تعديل كود. فارغ = طبقة القنوات والـ Cache تبقيان في-الذاكرة
+# (عملية واحدة فقط — كافٍ لتطوير محلي بعملية runserver واحدة، لا يصلح لعدة Workers).
+REDIS_URL = config('REDIS_URL', default='')
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_URL]},
+        },
+    }
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
+    }
+    CACHES = {
+        'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    }
+
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     'check-committee-deadlines-daily': {
         'task': 'committees.tasks.check_committee_deadlines',
         'schedule': crontab(hour=0, minute=0),
     },
+    'check-committee-deadlines-approaching-daily': {
+        'task': 'notifications.tasks.check_committee_deadlines_approaching',
+        'schedule': crontab(hour=6, minute=0),
+    },
+    'send-daily-notification-digest': {
+        'task': 'notifications.tasks.send_daily_notification_digest',
+        'schedule': crontab(hour=7, minute=0),
+    },
+    'cleanup-old-read-notifications-weekly': {
+        'task': 'notifications.tasks.cleanup_old_read_notifications',
+        'schedule': crontab(hour=3, minute=0, day_of_week=0),
+    },
 }
 
 COMMITTEE_DEADLINE_DAYS = 15
+
+FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')

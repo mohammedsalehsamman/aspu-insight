@@ -92,7 +92,12 @@ urlpatterns = [
     path(
         'api/v1/committees-app/', include('committees.urls')
         ),
-    
+
+    path(
+        'api/notifications/notificationsAspu2004/',
+        include('notifications.urls')
+    ),
+
 ]
 
 if settings.DEBUG:

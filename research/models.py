@@ -3,7 +3,7 @@ from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from rest_framework.exceptions import ValidationError
 
-from research.validators import validate_file_size
+from research.validators import validate_file_size, validate_pdf_content
 
 class ResearchPaper(models.Model):
     class Status(models.TextChoices):
@@ -21,7 +21,7 @@ class ResearchPaper(models.Model):
     title = models.CharField(max_length=255)
     abstract = models.TextField()
     pdf_file = models.FileField(upload_to='papers_pdf/', blank=True, null=True,
-                             validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf'])])
+                             validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf']), validate_pdf_content])
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='papers')
     is_paid_open_access = models.BooleanField(default=False)
     status = models.CharField(max_length=25, choices=Status.choices, default=Status.PENDING)
@@ -70,6 +70,36 @@ class PlagiarismReport(models.Model):
 
     def str(self):
         return f"Report for {self.paper.title}"
+
+class MetadataQualityReport(models.Model):
+    class Status(models.TextChoices):
+        PENDING   = 'pending',   'قيد المعالجة'
+        COMPLETED = 'completed', 'مكتمل'
+        FAILED    = 'failed',    'فشل'
+
+    paper = models.OneToOneField(ResearchPaper, on_delete=models.CASCADE, related_name='metadata_quality_report')
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    overall_score = models.FloatField(default=0.0)
+    sub_scores = models.JSONField(default=dict, blank=True)
+    breakdown = models.JSONField(default=list, blank=True)
+    recommendations = models.JSONField(default=list, blank=True)
+    error_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'MetadataQualityReport'
+
+    def __str__(self):
+        return f"Metadata quality for {self.paper.title}: {self.overall_score}/100"
+
+    @property
+    def status_display_ar(self) -> str:
+        return {
+            'pending': 'قيد المعالجة',
+            'completed': 'مكتمل',
+            'failed': 'فشل',
+        }.get(self.status, self.status)
 
 class PlagiarismSource(models.Model):
     class SourceType(models.TextChoices):
@@ -128,3 +158,17 @@ class PaperEmbedding(models.Model):
 
     def str(self):
         return f"Embedding for {self.paper.title}"
+
+class PaperDownload(models.Model):
+    paper = models.ForeignKey(ResearchPaper, on_delete=models.CASCADE, related_name='downloads')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='paper_downloads'
+    )
+    downloaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-downloaded_at']
+
+    def str(self):
+        return f"Download of {self.paper.title} at {self.downloaded_at}"

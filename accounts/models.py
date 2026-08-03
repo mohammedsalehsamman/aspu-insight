@@ -1,8 +1,10 @@
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.core.validators import FileExtensionValidator
 from django.db import models
 from django.utils import timezone
 import pyotp
 from .managers import CustomUserManager
+from .validators import validate_image_size
 
 ROLE_CHOICES = [
     ('admin', 'مدير النظام'),
@@ -20,7 +22,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='author')
     institution = models.CharField(max_length=200, blank=True)
     orcid_id = models.CharField(max_length=50, blank=True)
-    profile_picture_url = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+    profile_picture_url = models.ImageField(
+        upload_to='profile_pictures/', blank=True, null=True,
+        validators=[validate_image_size, FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png', 'webp'])]
+    )
     bio = models.TextField(blank=True)
     preferred_language = models.CharField(max_length=5, default='ar')
     is_active = models.BooleanField(default=True)
@@ -43,7 +48,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         verbose_name = 'User'
         verbose_name_plural = 'Users'
 
-    def str(self):
+    def __str__(self):
         return f"{self.full_name} <{self.email}>"
 
     def generate_2fa_secret(self):
@@ -97,5 +102,5 @@ class PasswordResetToken(models.Model):
     def is_valid(self):
         return not self.is_used and self.expires_at > timezone.now()
 
-    def str(self):
+    def __str__(self):
         return f"Token for {self.user.email} [{self.token_type}]"

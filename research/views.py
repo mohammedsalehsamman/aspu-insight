@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.http import FileResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -5,8 +6,8 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from .models import ResearchPaper, PlagiarismReport
-from .serializers import ResearchPaperDetailSerializer, PlagiarismReportSerializer
+from .models import ResearchPaper, PlagiarismReport, MetadataQualityReport, PaperDownload
+from .serializers import ResearchPaperDetailSerializer, PlagiarismReportSerializer, MetadataQualityReportSerializer
 from configuration.models import JournalConfiguration
 from .service import ResearchPaperService
 
@@ -95,6 +96,8 @@ class ResearchPaperDetailAPIView(APIView):
         serializer = ResearchPaperDetailSerializer(paper, data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
+            from ai_service.tasks import compute_metadata_quality_task
+            transaction.on_commit(lambda: compute_metadata_quality_task.delay(paper_id))
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -118,14 +121,19 @@ class ResearchPaperDownloadAPIView(APIView):
         if not paper.pdf_file:
             return Response(status=status.HTTP_404_NOT_FOUND)
         user = request.user
-        if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
+
+        def serve():
+            PaperDownload.objects.create(paper=paper, user=user if user.is_authenticated else None)
             return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
+
+        if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
+            return serve()
         config = JournalConfiguration.objects.first()
         current_mode = config.system_mode if config else 'full_open'
         if current_mode == 'full_open':
-            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
+            return serve()
         if current_mode == 'hybrid' and paper.is_paid_open_access:
-            return FileResponse(paper.pdf_file.open('rb'), as_attachment=True, content_type='application/pdf')
+            return serve()
         return Response(status=status.HTTP_403_FORBIDDEN)
 
 class ResearchPaperPlagiarismReportView(APIView):
@@ -149,6 +157,29 @@ class ResearchPaperPlagiarismReportView(APIView):
                 return Response({"status": "pending"}, status=status.HTTP_202_ACCEPTED)
 
         serializer = PlagiarismReportSerializer(report, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class MetadataQualityReportView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, paper_id):
+        paper = get_object_or_404(ResearchPaper, id=paper_id)
+        user = request.user
+        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
+        if not is_assistant and paper.author != user:
+            if not ResearchPaperService.can_view(user, paper):
+                return Response({"detail": "You do not have permission to view this metadata quality report."}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            report = MetadataQualityReport.objects.get(paper=paper)
+        except MetadataQualityReport.DoesNotExist:
+            from ai_service.tasks import compute_metadata_quality_task
+            compute_metadata_quality_task(paper.id)
+            try:
+                report = MetadataQualityReport.objects.get(paper=paper)
+            except MetadataQualityReport.DoesNotExist:
+                return Response({"status": "pending"}, status=status.HTTP_202_ACCEPTED)
+
+        serializer = MetadataQualityReportSerializer(report, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class AuthorDashboardAPIView(APIView):

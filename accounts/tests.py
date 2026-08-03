@@ -64,6 +64,7 @@ class RegisterAPITest(APITestCase):
             'password': 'StrongPass123!',
             'password2': 'StrongPass123!',
             'role': 'author',
+            'specialization': 'علوم الحاسوب',
         }
 
     def test_register_success(self):

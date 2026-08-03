@@ -1,7 +1,7 @@
 from django.core.validators import FileExtensionValidator
 from rest_framework import serializers
-from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource
-from research.validators import validate_file_size
+from research.models import ResearchPaper, PlagiarismReport, PlagiarismSource, MetadataQualityReport
+from research.validators import validate_file_size, validate_pdf_content
 from committees.models import Committee, CommitteeMember
 
 class PlagiarismSourceSerializer(serializers.ModelSerializer):
@@ -25,16 +25,27 @@ class PlagiarismReportSerializer(serializers.ModelSerializer):
             'external_similarity_score', 'requires_human_review', 'ai_keywords', 'checked_at', 'sources'
         ]
 
+class MetadataQualityReportSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='status_display_ar', read_only=True)
+
+    class Meta:
+        model = MetadataQualityReport
+        fields = [
+            'id', 'overall_score', 'sub_scores', 'breakdown', 'recommendations',
+            'status', 'status_display', 'created_at', 'updated_at'
+        ]
+
 class ResearchPaperDetailSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
     pdf_file = serializers.FileField(
         required=False, allow_null=True,
-        validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf'])]
+        validators=[validate_file_size, FileExtensionValidator(allowed_extensions=['pdf']), validate_pdf_content]
     )
     plagiarism_score = serializers.SerializerMethodField()
     plagiarism_report_id = serializers.SerializerMethodField()
     plagiarism_status = serializers.SerializerMethodField()
     ai_keywords = serializers.SerializerMethodField()
+    metadata_quality_score = serializers.SerializerMethodField()
     assistant_editor_report = serializers.CharField(read_only=True)
 
     class Meta:
@@ -42,8 +53,8 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'title', 'abstract', 'is_paid_open_access', 'pdf_file',
             'author_name', 'status', 'rejection_reason', 'plagiarism_score', 'specialization',
-            'plagiarism_report_id', 'plagiarism_status', 'ai_keywords', 'assistant_editor_report',
-            'is_reviewed_by_assistant', 'review_blindness_type'
+            'plagiarism_report_id', 'plagiarism_status', 'ai_keywords', 'metadata_quality_score',
+            'assistant_editor_report', 'is_reviewed_by_assistant', 'review_blindness_type'
         ]
         read_only_fields = ['review_blindness_type']
 
@@ -101,6 +112,12 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
         except PlagiarismReport.DoesNotExist:
             return []
 
+    def get_metadata_quality_score(self, obj):
+        try:
+            return obj.metadata_quality_report.overall_score
+        except MetadataQualityReport.DoesNotExist:
+            return None
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
@@ -131,6 +148,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
                     filtered_rep['plagiarism_score'] = None
                     filtered_rep['plagiarism_report_id'] = None
                     filtered_rep['ai_keywords'] = []
+                    filtered_rep['metadata_quality_score'] = None
                     return filtered_rep
                 return representation
 
@@ -144,6 +162,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
                     filtered_rep['plagiarism_score'] = None
                     filtered_rep['plagiarism_report_id'] = None
                     filtered_rep['ai_keywords'] = []
+                    filtered_rep['metadata_quality_score'] = None
                     return filtered_rep
                 return representation
 
@@ -153,6 +172,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             representation['plagiarism_score'] = None
             representation['plagiarism_report_id'] = None
             representation['ai_keywords'] = []
+            representation['metadata_quality_score'] = None
 
         return representation
 
