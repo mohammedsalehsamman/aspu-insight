@@ -1,8 +1,10 @@
+import io
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from pypdf import PdfWriter
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -10,6 +12,17 @@ from ai_service.models import ClaimEvidenceGraphReport, IEEECheckReport
 from research.models import ResearchPaper
 
 User = get_user_model()
+
+
+def _minimal_pdf_bytes():
+    # ai_service/validators.py's validate_pdf_or_docx_content actually parses the
+    # upload with pypdf now (not just a %PDF- magic-byte sniff), so fixtures need a
+    # real, parseable single-page PDF rather than an arbitrary byte string.
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
 
 
 def make_user(email, role="author", **kwargs):
@@ -76,8 +89,8 @@ class IEEECheckViewTests(APITestCase):
         self.assistant_editor = make_user("assistant@example.com", role="assistant_editor")
         self.author = make_user("author@example.com", role="author")
 
-    def _pdf_file(self, name="paper.pdf", content=b"%PDF-1.4 fake content"):
-        return SimpleUploadedFile(name, content, content_type="application/pdf")
+    def _pdf_file(self, name="paper.pdf", content=None):
+        return SimpleUploadedFile(name, content or _minimal_pdf_bytes(), content_type="application/pdf")
 
     def test_unauthenticated_rejected(self):
         response = self.client.post(self.url, {"document_file": self._pdf_file()}, format="multipart")
@@ -218,7 +231,7 @@ class ClaimEvidenceGraphAnalyzeViewTests(APITestCase):
         self.author = make_user("author4@example.com", role="author")
 
     def _doc_file(self, name="paper.pdf"):
-        return SimpleUploadedFile(name, b"fake content", content_type="application/pdf")
+        return SimpleUploadedFile(name, _minimal_pdf_bytes(), content_type="application/pdf")
 
     def test_unauthenticated_rejected(self):
         response = self.client.post(self.url, {"document_file": self._doc_file()}, format="multipart")
@@ -367,32 +380,29 @@ class ClaimEvidenceGraphReportDetailViewTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    # NOTE (application bug, not fixed here per task instructions): ai_service/views.py's
-    # ClaimEvidenceGraphReportDetailView._forbidden_if_not_owner (line ~262) compares
-    # `request.user.id`, but accounts.User's primary key field is `user_id`, not `id` — the
-    # custom user model never gets an implicit `id` AutoField. Any request that reaches the
-    # `elif report.requested_by_id != request.user.id` branch (i.e. every request for a report
-    # that HAS an owner, including the owner's own request and an admin's request) raises an
-    # uncaught AttributeError instead of returning 200/403. Only the "orphan report" branch
-    # (requested_by is None) is unaffected, since it never touches `.id`. The tests below pin
-    # down this actual (buggy) behavior rather than the intended one.
-    def test_owner_viewing_own_report_currently_crashes_due_to_user_id_bug(self):
+    # Regression coverage for a fix: ClaimEvidenceGraphReportDetailView._forbidden_if_not_owner
+    # (line ~262) used to compare `request.user.id`, but accounts.User's primary key field is
+    # `user_id`, not `id` — the custom user model never gets an implicit `id` AutoField. Any
+    # request that reached the `elif report.requested_by_id != request.user.id` branch (i.e.
+    # every request for a report that HAS an owner) raised an uncaught AttributeError instead of
+    # returning 200/403. Fixed by comparing against `request.user.pk` instead.
+    def test_owner_viewing_own_report_succeeds(self):
         self.client.force_authenticate(user=self.owner)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.owned_report.id})
-        with self.assertRaises(AttributeError):
-            self.client.get(url)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_non_owner_viewing_report_currently_crashes_due_to_user_id_bug(self):
+    def test_non_owner_viewing_report_forbidden(self):
         self.client.force_authenticate(user=self.other_editor)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.owned_report.id})
-        with self.assertRaises(AttributeError):
-            self.client.get(url)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_admin_viewing_owned_report_currently_crashes_due_to_user_id_bug(self):
+    def test_admin_viewing_owned_report_succeeds(self):
         self.client.force_authenticate(user=self.admin)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.owned_report.id})
-        with self.assertRaises(AttributeError):
-            self.client.get(url)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_orphan_report_only_visible_to_admin(self):
         self.client.force_authenticate(user=self.other_editor)
@@ -404,12 +414,12 @@ class ClaimEvidenceGraphReportDetailViewTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_owner_deleting_own_report_currently_crashes_due_to_user_id_bug(self):
+    def test_owner_deleting_own_report_succeeds(self):
         self.client.force_authenticate(user=self.owner)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.owned_report.id})
-        with self.assertRaises(AttributeError):
-            self.client.delete(url)
-        self.assertTrue(ClaimEvidenceGraphReport.objects.filter(id=self.owned_report.id).exists())
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(ClaimEvidenceGraphReport.objects.filter(id=self.owned_report.id).exists())
 
     def test_delete_not_found_returns_404(self):
         self.client.force_authenticate(user=self.owner)

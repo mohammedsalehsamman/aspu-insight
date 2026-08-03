@@ -72,12 +72,23 @@ class GetVisiblePapersTests(TestCase):
         self.assertIn(self.private_own, papers)
         self.assertNotIn(self.private_others, papers)
 
-    def test_committee_member_sees_assigned_paper(self):
+    def test_committee_member_sees_assigned_reviewed_paper(self):
+        self.private_others.is_reviewed_by_assistant = True
+        self.private_others.save()
         committee = Committee.objects.create(paper=self.private_others, editor=self.editor)
         CommitteeMember.objects.create(committee=committee, user=self.reviewer, role='primary')
 
         papers = set(ResearchPaperService.get_visible_papers(self.reviewer))
         self.assertIn(self.private_others, papers)
+
+    def test_committee_member_does_not_see_unreviewed_assigned_paper(self):
+        # Regression: get_visible_papers used to include this regardless of
+        # is_reviewed_by_assistant, inconsistent with can_view's stricter rule.
+        committee = Committee.objects.create(paper=self.private_others, editor=self.editor)
+        CommitteeMember.objects.create(committee=committee, user=self.reviewer, role='primary')
+
+        papers = set(ResearchPaperService.get_visible_papers(self.reviewer))
+        self.assertNotIn(self.private_others, papers)
 
     def test_editor_sees_reviewed_paper_assigned_to_their_committee(self):
         self.private_others.is_reviewed_by_assistant = True

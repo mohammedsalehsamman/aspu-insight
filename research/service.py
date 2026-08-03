@@ -50,7 +50,7 @@ class ResearchPaperService:
             return ResearchPaperService._apply_search(papers, search)
 
         assigned_paper_ids = CommitteeMember.objects.filter(
-            user=user
+            user=user, committee__paper__is_reviewed_by_assistant=True
         ).values_list('committee__paper_id', flat=True)
 
         is_editor_role = getattr(user, 'role', '') == 'editor'

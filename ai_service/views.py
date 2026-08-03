@@ -254,7 +254,7 @@ class ClaimEvidenceGraphReportDetailView(APIView):
         if report.requested_by_id is None:
             if request.user.role != 'admin':
                 return Response({"error": "غير مصرح لك بالوصول إلى هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
-        elif report.requested_by_id != request.user.id and request.user.role != 'admin':
+        elif report.requested_by_id != request.user.pk and request.user.role != 'admin':
             return Response({"error": "غير مصرح لك بالوصول إلى هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
         return None
 

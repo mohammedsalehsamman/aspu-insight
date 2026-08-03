@@ -56,7 +56,13 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             'plagiarism_report_id', 'plagiarism_status', 'ai_keywords', 'metadata_quality_score',
             'assistant_editor_report', 'is_reviewed_by_assistant', 'review_blindness_type'
         ]
-        read_only_fields = ['review_blindness_type']
+        read_only_fields = [
+            'review_blindness_type',
+            # status/is_reviewed_by_assistant/rejection_reason only change through the
+            # assistantReview/editorReview pipeline (which also logs ResearchHistory);
+            # a raw PUT here must never let an author self-approve or self-publish.
+            'status', 'is_reviewed_by_assistant', 'rejection_reason',
+        ]
 
     def get_author_name(self, obj):
         request = self.context.get('request')
@@ -159,6 +165,7 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
                     allowed_fields = ['id', 'title', 'abstract', 'assistant_editor_report']
                     filtered_rep = {field: representation.get(field) for field in allowed_fields if field in representation}
                     filtered_rep['pdf_file'] = None
+                    filtered_rep['author_name'] = representation.get('author_name')
                     filtered_rep['plagiarism_score'] = None
                     filtered_rep['plagiarism_report_id'] = None
                     filtered_rep['ai_keywords'] = []

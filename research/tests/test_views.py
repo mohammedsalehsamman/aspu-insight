@@ -197,17 +197,25 @@ class PaperDetailPutDeletePermissionTests(APITestCase):
         self.assertTrue(ResearchPaper.objects.filter(pk=self.paper.pk).exists())
 
 
-class PutDeleteSerializerEnforcementFindingTests(APITestCase):
+class PutDeleteBusinessRuleEnforcementTests(APITestCase):
     """
-    Investigates the specific concern raised by the project owner: does
-    ResearchPaperDetailAPIView.put()/delete() enforce the same business rules
-    that research/service.py declares (ResearchPaperService.can_update /
-    can_delete), or only the bare author/staff ownership check?
+    Regression coverage for a fix: ResearchPaperDetailAPIView.put()/delete()
+    used to enforce only the bare author/staff ownership check, silently
+    ignoring both the serializer's intended read-only fields and
+    research/service.py's ResearchPaperService.can_update/can_delete business
+    rules. A plain author could set status/is_reviewed_by_assistant/
+    rejection_reason directly via PUT (self-publishing, bypassing the
+    assistant/editor/committee review pipeline and its ResearchHistory audit
+    trail), and could edit/delete a paper already in committee review.
+    Fixed by: marking those fields read_only on ResearchPaperDetailSerializer,
+    and gating put()/delete() on ResearchPaperService.can_update/can_delete
+    for non-staff requests.
     """
 
     def setUp(self):
         self.author = make_user('author@example.com')
         self.editor = make_user('editor@example.com', role='editor')
+        self.staff = make_user('staff@example.com', is_staff=True)
         self.paper = ResearchPaper.objects.create(
             title='Original Title', abstract='original abstract', author=self.author,
             specialization='law', status=ResearchPaper.Status.SUBMITTED,
@@ -215,13 +223,7 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
         )
         self.url = reverse('paper-detail', kwargs={'paper_id': self.paper.id})
 
-    def test_plain_author_can_set_status_to_published_via_put(self):
-        """
-        PROOF: a plain (non-staff) author PUTting to paper-detail can set
-        status directly to PUBLISHED, completely bypassing the assistant
-        review / editor review / committee pipeline that normally drives
-        status transitions (and that also logs a ResearchHistory entry).
-        """
+    def test_plain_author_cannot_set_status_via_put(self):
         self.client.force_authenticate(user=self.author)
         response = self.client.put(self.url, {
             'title': 'Original Title',
@@ -232,15 +234,9 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.paper.refresh_from_db()
-        self.assertEqual(self.paper.status, ResearchPaper.Status.PUBLISHED)
+        self.assertEqual(self.paper.status, ResearchPaper.Status.SUBMITTED)
 
-    def test_plain_author_can_set_is_reviewed_by_assistant_via_put(self):
-        """
-        PROOF: a plain author can flip is_reviewed_by_assistant to True
-        themselves, even though this flag is meant to be set only by
-        AssistantReviewService and gates editor/committee visibility
-        (see research/service.py can_view and get_visible_papers).
-        """
+    def test_plain_author_cannot_set_is_reviewed_by_assistant_via_put(self):
         self.client.force_authenticate(user=self.author)
         response = self.client.put(self.url, {
             'title': 'Original Title',
@@ -251,9 +247,9 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.paper.refresh_from_db()
-        self.assertTrue(self.paper.is_reviewed_by_assistant)
+        self.assertFalse(self.paper.is_reviewed_by_assistant)
 
-    def test_plain_author_can_set_rejection_reason_via_put(self):
+    def test_plain_author_cannot_set_rejection_reason_via_put(self):
         self.client.force_authenticate(user=self.author)
         response = self.client.put(self.url, {
             'title': 'Original Title',
@@ -264,11 +260,9 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.paper.refresh_from_db()
-        self.assertEqual(self.paper.rejection_reason, 'author-written fake rejection reason')
+        self.assertEqual(self.paper.rejection_reason, '')
 
-    def test_only_review_blindness_type_is_actually_protected(self):
-        """review_blindness_type IS the one field DRF blocks (declared read_only),
-        confirming the other sensitive fields are protected by nothing at all."""
+    def test_review_blindness_type_still_protected(self):
         self.client.force_authenticate(user=self.author)
         response = self.client.put(self.url, {
             'title': 'Original Title',
@@ -281,9 +275,7 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
         self.paper.refresh_from_db()
         self.assertEqual(self.paper.review_blindness_type, 'double_blind')  # unchanged
 
-    def test_status_change_via_put_does_not_create_a_research_history_entry(self):
-        """Contrast with the legitimate pipeline (assistantReview/editorReview),
-        which always logs a ResearchHistory entry on status transitions."""
+    def test_status_field_in_put_never_creates_a_research_history_entry(self):
         from researchHistory.models import ResearchHistory
 
         self.client.force_authenticate(user=self.author)
@@ -296,30 +288,20 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
 
         self.assertEqual(ResearchHistory.objects.filter(paper=self.paper).count(), 0)
 
-    def test_delete_view_bypasses_can_delete_business_rule_gate(self):
-        """
-        PROOF: research/service.py defines ResearchPaperService.can_delete()
-        (== can_update()), which forbids an author from deleting/updating a
-        paper once a Committee exists and the paper's status has moved past
-        REVISION_REQUIRED/REJECTED (e.g. COMMITTEE_REVIEW, PUBLISHED). The
-        view's delete() never calls this service method — it only checks
-        author/staff ownership — so the author can delete the paper anyway.
-        """
+    def test_delete_view_enforces_can_delete_business_rule_gate(self):
         Committee.objects.create(paper=self.paper, editor=self.editor)
         self.paper.status = ResearchPaper.Status.COMMITTEE_REVIEW
         self.paper.save()
 
-        # Confirm the service-layer rule says this should NOT be allowed.
         self.assertFalse(ResearchPaperService.can_delete(self.author, self.paper))
 
         self.client.force_authenticate(user=self.author)
         response = self.client.delete(self.url)
 
-        # But the view allows it anyway.
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(ResearchPaper.objects.filter(pk=self.paper.pk).exists())
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(ResearchPaper.objects.filter(pk=self.paper.pk).exists())
 
-    def test_delete_view_bypasses_can_delete_gate_for_published_paper(self):
+    def test_delete_view_enforces_can_delete_gate_for_published_paper(self):
         Committee.objects.create(paper=self.paper, editor=self.editor)
         self.paper.status = ResearchPaper.Status.PUBLISHED
         self.paper.save()
@@ -329,10 +311,28 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
         self.client.force_authenticate(user=self.author)
         response = self.client.delete(self.url)
 
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(ResearchPaper.objects.filter(pk=self.paper.pk).exists())
+
+    def test_staff_can_still_delete_despite_can_delete_gate(self):
+        Committee.objects.create(paper=self.paper, editor=self.editor)
+        self.paper.status = ResearchPaper.Status.COMMITTEE_REVIEW
+        self.paper.save()
+
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.delete(self.url)
+
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(ResearchPaper.objects.filter(pk=self.paper.pk).exists())
 
-    def test_put_view_also_bypasses_can_update_business_rule_gate(self):
+    def test_author_can_still_delete_a_paper_with_no_committee(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(ResearchPaper.objects.filter(pk=self.paper.pk).exists())
+
+    def test_put_view_enforces_can_update_business_rule_gate(self):
         Committee.objects.create(paper=self.paper, editor=self.editor)
         self.paper.status = ResearchPaper.Status.COMMITTEE_REVIEW
         self.paper.save()
@@ -346,9 +346,38 @@ class PutDeleteSerializerEnforcementFindingTests(APITestCase):
             'specialization': 'law',
         }, format='json')
 
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.paper.refresh_from_db()
+        self.assertEqual(self.paper.title, 'Original Title')
+
+    def test_staff_can_still_edit_despite_can_update_gate(self):
+        Committee.objects.create(paper=self.paper, editor=self.editor)
+        self.paper.status = ResearchPaper.Status.COMMITTEE_REVIEW
+        self.paper.save()
+
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.put(self.url, {
+            'title': 'edited by staff during committee review',
+            'abstract': 'original abstract',
+            'specialization': 'law',
+        }, format='json')
+
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.paper.refresh_from_db()
-        self.assertEqual(self.paper.title, 'edited despite committee review')
+        self.assertEqual(self.paper.title, 'edited by staff during committee review')
+
+    def test_author_can_still_edit_ordinary_fields_before_committee_review(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.put(self.url, {
+            'title': 'updated title',
+            'abstract': 'updated abstract',
+            'specialization': 'law',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.paper.refresh_from_db()
+        self.assertEqual(self.paper.title, 'updated title')
+        self.assertEqual(self.paper.abstract, 'updated abstract')
 
 
 class DownloadPaperViewTests(APITestCase):

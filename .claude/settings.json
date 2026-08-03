@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -sL -A \"Mozilla/5.0\" -o \"accounting_ouargla.pdf\" \"https://dspace.univ-ouargla.dz/jspui/bitstream/123456789/33010/1/salami-belaouar.pdf\" --max-time 90 --retry 2 -w \"HTTP:%{http_code}\\\\n\")",
+      "Bash(xxd)",
+      "Bash(\"./venv/Scripts/python.exe\" \"C:/Users/hp/AppData/Local/Temp/claude/c--Users-hp-Desktop-aspuinsight-aspu-insight/3e7ab991-58d2-4148-bf34-0b1e7e8243b1/scratchpad/test_real_external_papers.py\")"
+    ]
+  }
+}

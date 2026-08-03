@@ -22,12 +22,17 @@ MAX_SENTENCES = 500
 _SENTENCE_BOUNDARY_RE = re.compile(r'(?<=[.!?؟])\s+')
 
 def _segment_sentences(text: str) -> list[str]:
-    ensure_nltk_punkt()
-    from nltk.tokenize import sent_tokenize
-
     raw_sentences = []
-    for chunk in sent_tokenize(text):
-        raw_sentences.extend(_SENTENCE_BOUNDARY_RE.split(chunk))
+    if ensure_nltk_punkt():
+        try:
+            from nltk.tokenize import sent_tokenize
+            for chunk in sent_tokenize(text):
+                raw_sentences.extend(_SENTENCE_BOUNDARY_RE.split(chunk))
+        except Exception:
+            logger.exception("nltk sent_tokenize failed despite punkt being available; falling back to regex splitter")
+            raw_sentences = _SENTENCE_BOUNDARY_RE.split(text)
+    else:
+        raw_sentences = _SENTENCE_BOUNDARY_RE.split(text)
 
     sentences = [s.strip() for s in raw_sentences if len(s.strip()) >= MIN_SENTENCE_CHARS]
 

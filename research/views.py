@@ -1,4 +1,3 @@
-from django.db import transaction
 from django.http import FileResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -93,12 +92,16 @@ class ResearchPaperDetailAPIView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         if paper.author != request.user and not request.user.is_staff:
             return Response(status=status.HTTP_403_FORBIDDEN)
+        if not request.user.is_staff and not ResearchPaperService.can_update(request.user, paper):
+            return Response(
+                {"detail": "لا يمكن تعديل البحث بعد دخوله مرحلة مراجعة اللجنة إلا إذا كانت حالته تتطلب تعديلاً أو مرفوضة."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         serializer = ResearchPaperDetailSerializer(paper, data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save()
-            from ai_service.tasks import compute_metadata_quality_task
-            transaction.on_commit(lambda: compute_metadata_quality_task.delay(paper_id))
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            ResearchPaperService.update_paper(paper, serializer.validated_data)
+            output_serializer = ResearchPaperDetailSerializer(paper, context={'request': request})
+            return Response(output_serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def delete(self, request, paper_id):
@@ -107,7 +110,12 @@ class ResearchPaperDetailAPIView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         if paper.author != request.user and not request.user.is_staff:
             return Response(status=status.HTTP_403_FORBIDDEN)
-        paper.delete()
+        if not request.user.is_staff and not ResearchPaperService.can_delete(request.user, paper):
+            return Response(
+                {"detail": "لا يمكن حذف البحث بعد دخوله مرحلة مراجعة اللجنة إلا إذا كانت حالته تتطلب تعديلاً أو مرفوضة."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        ResearchPaperService.delete_paper(paper)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class ResearchPaperDownloadAPIView(APIView):

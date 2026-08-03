@@ -24,33 +24,35 @@ def make_request(user):
 
 
 class MetaConfigurationTests(TestCase):
-    """Documents the exact field/read_only_fields configuration the PUT/DELETE
-    finding below depends on."""
+    """Regression coverage for a fix: status/is_reviewed_by_assistant/rejection_reason
+    used to be writable ModelSerializer fields with no read_only override, which let
+    ResearchPaperDetailAPIView.put() save them straight from client input (self-publish,
+    self-approve). They're now declared read_only alongside review_blindness_type."""
 
     def test_declared_fields(self):
         expected = {
             'id', 'title', 'abstract', 'is_paid_open_access', 'pdf_file',
             'author_name', 'status', 'rejection_reason', 'plagiarism_score', 'specialization',
-            'plagiarism_report_id', 'plagiarism_status', 'ai_keywords', 'assistant_editor_report',
-            'is_reviewed_by_assistant', 'review_blindness_type',
+            'plagiarism_report_id', 'plagiarism_status', 'ai_keywords', 'metadata_quality_score',
+            'assistant_editor_report', 'is_reviewed_by_assistant', 'review_blindness_type',
         }
         self.assertEqual(set(ResearchPaperDetailSerializer.Meta.fields), expected)
 
-    def test_only_review_blindness_type_is_declared_read_only(self):
-        self.assertEqual(ResearchPaperDetailSerializer.Meta.read_only_fields, ['review_blindness_type'])
+    def test_status_is_reviewed_by_assistant_rejection_reason_and_blindness_are_read_only(self):
+        self.assertEqual(
+            set(ResearchPaperDetailSerializer.Meta.read_only_fields),
+            {'review_blindness_type', 'status', 'is_reviewed_by_assistant', 'rejection_reason'},
+        )
 
-    def test_status_and_is_reviewed_by_assistant_are_writable_at_the_serializer_field_level(self):
-        # status and is_reviewed_by_assistant have no read_only override anywhere on the
-        # serializer (no SerializerMethodField, no explicit read_only=True), so DRF treats
-        # them as normal writable ModelSerializer fields.
+    def test_status_and_is_reviewed_by_assistant_are_read_only_at_the_serializer_field_level(self):
         serializer = ResearchPaperDetailSerializer()
-        self.assertFalse(serializer.fields['status'].read_only)
-        self.assertFalse(serializer.fields['is_reviewed_by_assistant'].read_only)
-        self.assertFalse(serializer.fields['rejection_reason'].read_only)
-        # Sanity check: review_blindness_type IS read-only as declared.
+        self.assertTrue(serializer.fields['status'].read_only)
+        self.assertTrue(serializer.fields['is_reviewed_by_assistant'].read_only)
+        self.assertTrue(serializer.fields['rejection_reason'].read_only)
         self.assertTrue(serializer.fields['review_blindness_type'].read_only)
 
-    def test_is_valid_accepts_status_and_is_reviewed_by_assistant_changes(self):
+    def test_is_valid_silently_drops_status_and_is_reviewed_by_assistant_changes(self):
+        # DRF silently excludes read_only fields from validated_data rather than erroring.
         author = make_user('author@example.com')
         paper = ResearchPaper.objects.create(
             title='Paper', abstract='a', author=author,
@@ -66,8 +68,8 @@ class MetaConfigurationTests(TestCase):
             context={'request': make_request(author)},
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
-        self.assertEqual(serializer.validated_data['status'], ResearchPaper.Status.PUBLISHED)
-        self.assertTrue(serializer.validated_data['is_reviewed_by_assistant'])
+        self.assertNotIn('status', serializer.validated_data)
+        self.assertNotIn('is_reviewed_by_assistant', serializer.validated_data)
 
 
 class GetAuthorNameTests(TestCase):
@@ -116,19 +118,20 @@ class GetAuthorNameTests(TestCase):
         serializer = ResearchPaperDetailSerializer(paper, context={'request': make_request(self.reviewer)})
         self.assertIn('Anonymous', serializer.data['author_name'])
 
-    def test_committee_member_pending_response_drops_author_name_field_entirely(self):
+    def test_committee_member_pending_response_still_includes_author_name(self):
         """
-        Documents an inconsistency: the editor-pending restricted-fields branch
-        explicitly preserves author_name (filtered_rep['author_name'] = ...),
-        but the committee-member-pending branch has no equivalent line, so
-        author_name is silently missing from the response instead of being
-        anonymized like the rest of the blind-review logic does.
+        Regression coverage for a fix: the committee-member-pending branch used to
+        have no line preserving author_name (unlike the editor-pending branch,
+        which explicitly does via filtered_rep['author_name'] = ...), so the field
+        was silently missing instead of being anonymized like the rest of the
+        blind-review logic. Both branches now behave consistently.
         """
         paper = self._paper('single_blind')
         committee = Committee.objects.create(paper=paper, editor=self.editor)  # status defaults to 'pending'
         CommitteeMember.objects.create(committee=committee, user=self.reviewer, role='primary')  # response defaults to 'pending'
         serializer = ResearchPaperDetailSerializer(paper, context={'request': make_request(self.reviewer)})
-        self.assertNotIn('author_name', serializer.data)
+        self.assertIn('author_name', serializer.data)
+        self.assertIn('Anonymous', serializer.data['author_name'])
 
     def test_open_review_reveals_name_to_anyone_authenticated(self):
         paper = self._paper('open_review')
@@ -143,26 +146,24 @@ class ToRepresentationVisibilityTests(TestCase):
         self.assistant = make_user('assistant@example.com', role='assistant_editor')
         self.editor = make_user('editor@example.com', role='editor')
 
-    def test_serializer_crashes_if_context_has_no_request_at_all(self):
+    def test_serializer_does_not_crash_if_context_has_no_request_at_all(self):
         """
-        Documents a latent bug in ResearchPaperDetailSerializer.to_representation:
-        `user = request.user if request else None` allows `user` to be plain
-        None (context.get('request') returns None when no 'request' key is
-        supplied at all). configuration.security.can_user_access_pdf then does
-        `user.is_authenticated` unconditionally, which raises AttributeError
-        on None. In production this path is never hit because every call site
-        in research/views.py always passes context={'request': request}, and
-        DRF requests always carry AnonymousUser rather than None — but the
-        serializer itself has no defense if reused without a request in
-        context (e.g. a management command or another app's future caller).
+        Regression coverage for a fix: ResearchPaperDetailSerializer.to_representation's
+        `user = request.user if request else None` allowed `user` to be plain None
+        (context.get('request') returns None when no 'request' key is supplied at
+        all), and configuration.security.can_user_access_pdf then did
+        `user.is_authenticated` unconditionally, raising AttributeError on None.
+        can_user_access_pdf now guards against user being None/falsy, so a
+        request-less context degrades to anonymous-visitor behavior instead of
+        crashing (useful for reuse outside a view, e.g. a management command).
         """
         paper = ResearchPaper.objects.create(
             title='Paper', abstract='a', author=self.author, specialization='law',
             status=ResearchPaper.Status.PUBLISHED,
         )
         serializer = ResearchPaperDetailSerializer(paper, context={})
-        with self.assertRaises(AttributeError):
-            _ = serializer.data
+        data = serializer.data
+        self.assertEqual(data['pdf_file'], None)
 
     def test_unreviewed_paper_hidden_from_unrelated_authenticated_user(self):
         paper = ResearchPaper.objects.create(

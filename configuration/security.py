@@ -2,10 +2,12 @@ from configuration.models import JournalConfiguration
 
 def can_user_access_pdf(user, paper):
 
-    if user.is_authenticated and (user.is_staff or user.is_superuser):
+    is_authenticated = bool(user and user.is_authenticated)
+
+    if is_authenticated and (user.is_staff or user.is_superuser):
         return True
-        
-    if user.is_authenticated and user == paper.author:
+
+    if is_authenticated and user == paper.author:
         return True
 
     config = JournalConfiguration.objects.first()
@@ -19,7 +21,7 @@ def can_user_access_pdf(user, paper):
 
     if current_mode == 'full_closed':
 
-        if user.is_authenticated and getattr(user, 'has_active_subscription', False):
+        if is_authenticated and getattr(user, 'has_active_subscription', False):
             return True
         return False
 
@@ -28,7 +30,7 @@ def can_user_access_pdf(user, paper):
         if paper.is_paid_open_access:
             return True
 
-        if user.is_authenticated and getattr(user, 'has_active_subscription', False):
+        if is_authenticated and getattr(user, 'has_active_subscription', False):
             return True
         return False
 

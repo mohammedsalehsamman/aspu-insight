@@ -8,6 +8,7 @@ from rest_framework.exceptions import ValidationError, PermissionDenied, NotFoun
 
 from committees.models import Committee, CommitteeMember
 from committees.services import CommitteeService
+from notifications.models import Notification
 from research.models import ResearchPaper
 
 User = get_user_model()
@@ -212,8 +213,8 @@ class HandleReviewerResponseTests(TestCase):
         self.assertEqual(self.substitute_member.role, 'primary')
         self.assertEqual(self.substitute_member.response, 'accepted')
 
-    @patch('committees.services.send_substitute_invitation_email')
-    def test_decline_after_acceptance_resets_committee_and_invites_substitute(self, mock_send):
+    @patch('committees.services.NotificationService.create_notification')
+    def test_decline_after_acceptance_resets_committee_and_invites_substitute(self, mock_notify):
         CommitteeService.handle_reviewer_response(self.reviewers[0], self.primary_members[0].id, True)
         CommitteeService.handle_reviewer_response(self.reviewers[1], self.primary_members[1].id, True)
         CommitteeService.handle_reviewer_response(self.reviewers[2], self.primary_members[2].id, True)
@@ -227,12 +228,17 @@ class HandleReviewerResponseTests(TestCase):
         self.assertEqual(self.committee.status, 'pending')
         self.assertEqual(self.primary_members[0].response, 'declined')
         self.assertEqual(self.primary_members[0].paper_decision, 'pending')
-        mock_send.assert_called_once()
+        mock_notify.assert_called_once()
+        self.assertEqual(mock_notify.call_args.kwargs['recipient'], self.substitute_member.user)
+        self.assertEqual(
+            mock_notify.call_args.kwargs['notification_type'],
+            Notification.NotificationType.REVIEWER_ASSIGNED_TO_COMMITTEE,
+        )
 
-    @patch('committees.services.send_substitute_invitation_email')
-    def test_decline_without_prior_acceptance_does_not_invite_substitute(self, mock_send):
+    @patch('committees.services.NotificationService.create_notification')
+    def test_decline_without_prior_acceptance_does_not_invite_substitute(self, mock_notify):
         CommitteeService.handle_reviewer_response(self.reviewers[0], self.primary_members[0].id, False)
-        mock_send.assert_not_called()
+        mock_notify.assert_not_called()
         self.primary_members[0].refresh_from_db()
         self.assertEqual(self.primary_members[0].response, 'declined')
 
@@ -364,16 +370,21 @@ class ExpireOverdueCommitteesTests(TestCase):
         committee.refresh_from_db()
         return committee
 
-    @patch('committees.services.send_committee_expiry_email')
-    def test_overdue_without_majority_expires_and_emails(self, mock_send):
+    @patch('committees.services.NotificationService.create_notification')
+    def test_overdue_without_majority_expires_and_emails(self, mock_notify):
         committee = self._make_overdue_committee('pending')
         CommitteeService.expire_overdue_committees()
         committee.refresh_from_db()
         self.assertEqual(committee.status, 'expired')
-        mock_send.assert_called_once_with(committee)
+        mock_notify.assert_called_once()
+        self.assertEqual(mock_notify.call_args.kwargs['recipient'], self.editor)
+        self.assertEqual(
+            mock_notify.call_args.kwargs['notification_type'],
+            Notification.NotificationType.COMMITTEE_DEADLINE_EXPIRED,
+        )
 
-    @patch('committees.services.send_committee_expiry_email')
-    def test_overdue_with_majority_forces_decision_instead_of_expiring(self, mock_send):
+    @patch('committees.services.NotificationService.create_notification')
+    def test_overdue_with_majority_forces_decision_instead_of_expiring(self, mock_notify):
         committee = self._make_overdue_committee('approved')
         for r, d in zip(self.reviewers, ['accept_paper', 'accept_paper', 'pending']):
             CommitteeMember.objects.create(
@@ -382,23 +393,29 @@ class ExpireOverdueCommitteesTests(TestCase):
         CommitteeService.expire_overdue_committees()
         committee.refresh_from_db()
         self.assertEqual(committee.status, 'accepted')
-        mock_send.assert_not_called()
+        # _try_force_decision notifies the decision instead (COMMITTEE_REVIEW_RECEIVED),
+        # so the expiry-specific notification must never fire.
+        for call in mock_notify.call_args_list:
+            self.assertNotEqual(
+                call.kwargs['notification_type'],
+                Notification.NotificationType.COMMITTEE_DEADLINE_EXPIRED,
+            )
 
-    @patch('committees.services.send_committee_expiry_email')
-    def test_not_overdue_committee_is_untouched(self, mock_send):
+    @patch('committees.services.NotificationService.create_notification')
+    def test_not_overdue_committee_is_untouched(self, mock_notify):
         committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
         CommitteeService.expire_overdue_committees()
         committee.refresh_from_db()
         self.assertEqual(committee.status, 'pending')
-        mock_send.assert_not_called()
+        mock_notify.assert_not_called()
 
-    @patch('committees.services.send_committee_expiry_email')
-    def test_final_status_committee_not_touched_even_if_overdue(self, mock_send):
+    @patch('committees.services.NotificationService.create_notification')
+    def test_final_status_committee_not_touched_even_if_overdue(self, mock_notify):
         committee = self._make_overdue_committee('rejected')
         CommitteeService.expire_overdue_committees()
         committee.refresh_from_db()
         self.assertEqual(committee.status, 'rejected')
-        mock_send.assert_not_called()
+        mock_notify.assert_not_called()
 
 
 class GetResearchPaperDetailsTests(TestCase):
@@ -418,11 +435,8 @@ class GetResearchPaperDetailsTests(TestCase):
     def test_author_sees_own_name_and_pdf(self, mock_access):
         data, is_blinded = CommitteeService.get_research_paper_details(self.author, self.paper.id)
         self.assertFalse(is_blinded)
-        # NOTE: accounts.models.User defines `def str(self)` instead of `def __str__(self)`,
-        # and has no get_full_name(), so str(paper.author) falls back to AbstractBaseUser's
-        # default __str__ (the username/email), not the user's full_name. This is a real bug
-        # in accounts/models.py that leaks into this API's "author_name" field.
-        self.assertEqual(data['author_name'], self.author.email)
+        self.assertEqual(data['author_name'], str(self.author))
+        self.assertIn(self.author.email, data['author_name'])
         self.assertEqual(data['id'], self.paper.id)
 
     @patch('configuration.security.can_user_access_pdf', return_value=False)
@@ -436,6 +450,4 @@ class GetResearchPaperDetailsTests(TestCase):
     def test_editor_still_sees_author_name_even_when_blinded(self, mock_access):
         data, is_blinded = CommitteeService.get_research_paper_details(self.editor, self.paper.id)
         self.assertTrue(is_blinded)
-        # See NOTE above: author_name resolves to the email, not full_name, due to the
-        # accounts.models.User `str` vs `__str__` bug.
-        self.assertEqual(data['author_name'], self.author.email)
+        self.assertEqual(data['author_name'], str(self.author))
