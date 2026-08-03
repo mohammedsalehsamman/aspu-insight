@@ -85,7 +85,8 @@ class CommitteeDetailAPIView(APIView):
             raise NotFound("لا توجد لجنة تحكيم لهذا البحث.")
 
         is_member = committee.committee_assigned_members.filter(user=user).exists()
-        if not (user.is_staff or committee.editor_id == getattr(user, 'user_id', None) or is_member):
+        is_author = committee.paper.author_id == getattr(user, 'user_id', None)
+        if not (user.is_staff or committee.editor_id == getattr(user, 'user_id', None) or is_member or is_author):
             raise PermissionDenied("غير مصرح لك بعرض تفاصيل هذه اللجنة.")
 
         serializer = CommitteeDetailsSerializer(committee, context={'request': request})

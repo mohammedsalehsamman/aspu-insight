@@ -1,0 +1,35 @@
+[run]
+source =
+    accounts
+    ai_service
+    aspu_insight
+    assistantReview
+    committees
+    configuration
+    dashboard
+    editorReview
+    notifications
+    research
+    researchHistory
+omit =
+    */migrations/*
+    */tests/*
+    */tests.py
+    */ml_training/*
+    */ml_models/*
+    manage.py
+    */apps.py
+    */admin.py
+    */asgi.py
+    */wsgi.py
+
+[report]
+skip_empty = True
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if TYPE_CHECKING:
+
+[html]
+directory = htmlcov

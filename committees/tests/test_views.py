@@ -211,3 +211,26 @@ class CommitteeDetailViewTests(APITestCase):
         self.client.force_authenticate(user=self.outsider)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_author_can_view(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_author_view_hides_reviewer_identity_when_blinded(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        member = response.data['members'][0]
+        self.assertEqual(member['user']['full_name'], 'محكم مخفي')
+
+    def test_author_view_exposes_requested_revisions(self):
+        self.committee.status = 'revision'
+        self.committee.save()
+        CommitteeMember.objects.filter(committee=self.committee, user=self.reviewer).update(
+            paper_decision='modify_paper', comments='يرجى توضيح المنهجية.'
+        )
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('يرجى توضيح المنهجية.', response.data['requested_revisions'])
