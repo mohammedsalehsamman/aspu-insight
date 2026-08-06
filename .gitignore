@@ -223,6 +223,8 @@ pg_hba.conf
 postgresql.conf
 
 media
+media_loadtest/
+*.loadtest.sqlite3
 
 # Hugging Face model cache (Claim-to-Evidence Graph)
 .hf_cache/

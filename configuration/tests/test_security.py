@@ -106,3 +106,16 @@ class CanUserAccessPdfTests(TestCase):
         config = JournalConfiguration.objects.create(system_mode='full_open')
         JournalConfiguration.objects.filter(pk=config.pk).update(system_mode='some_future_mode')
         self.assertFalse(can_user_access_pdf(self.other_user, self.paper))
+
+
+class HasActiveSubscriptionIsDeadCodeTests(TestCase):
+
+    def test_real_user_never_has_the_has_active_subscription_attribute(self):
+        user = make_user('subscriber@example.com', 'reader')
+        user.refresh_from_db()
+        self.assertFalse(
+            getattr(user, 'has_active_subscription', False),
+            "A real User instance has a truthy has_active_subscription — if a real "
+            "subscription mechanism was added, update the monkey-patched tests above to use "
+            "it instead of assigning the attribute by hand."
+        )

@@ -33,6 +33,19 @@ class NotificationConsumerTest(SimpleTestCase):
 
         await communicator.disconnect()
 
+    async def test_reused_ticket_is_rejected_on_second_connection_attempt(self):
+        cache.set(ws_ticket_cache_key('reuse-me'), 42, 30)
+        first = WebsocketCommunicator(NotificationConsumer.as_asgi(), '/ws/notifications/?ticket=reuse-me')
+        connected, _ = await first.connect()
+        self.assertTrue(connected)
+        await first.disconnect()
+
+        second = WebsocketCommunicator(NotificationConsumer.as_asgi(), '/ws/notifications/?ticket=reuse-me')
+        connected, close_code = await second.connect()
+
+        self.assertFalse(connected)
+        self.assertEqual(close_code, 4001)
+
     async def test_missing_ticket_closes_with_4001(self):
         communicator = WebsocketCommunicator(NotificationConsumer.as_asgi(), '/ws/notifications/')
 
