@@ -1,4 +1,5 @@
 from configuration.models import JournalConfiguration
+from research.models import ResearchPaper
 
 def can_user_access_pdf(user, paper):
 
@@ -9,6 +10,9 @@ def can_user_access_pdf(user, paper):
 
     if is_authenticated and user == paper.author:
         return True
+
+    if paper.status != ResearchPaper.Status.PUBLISHED:
+        return False
 
     config = JournalConfiguration.objects.first()
     current_mode = config.system_mode if config else 'full_open'

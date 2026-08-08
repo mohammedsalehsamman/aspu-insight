@@ -16,12 +16,15 @@ class DashboardBaseTest(APITestCase):
     def setUp(self):
         self.admin = User.objects.create(
             email="admin@example.com", full_name="Admin", role="admin", specialization="law",
+            email_verified=True,
         )
         self.editor = User.objects.create(
             email="editor@example.com", full_name="Editor", role="editor", specialization="law",
+            email_verified=True,
         )
         self.author = User.objects.create(
             email="author@example.com", full_name="Author", role="author", specialization="law",
+            email_verified=True,
         )
 
 
@@ -33,7 +36,7 @@ class AdminDashboardStatsViewTest(DashboardBaseTest):
         # extra users for role/status breakdown
         self.assistant = User.objects.create(
             email="assistant@example.com", full_name="Assistant", role="assistant_editor",
-            specialization="law",
+            specialization="law", email_verified=True,
         )
         self.reviewer = User.objects.create(
             email="reviewer@example.com", full_name="Reviewer", role="reviewer",
@@ -137,6 +140,7 @@ class AdminDashboardStatsViewTest(DashboardBaseTest):
 
         self.admin = User.objects.create(
             email="onlyadmin@example.com", full_name="Only Admin", role="admin", specialization="law",
+            email_verified=True,
         )
         self.client.force_authenticate(user=self.admin)
         response = self.client.get(self.url)
@@ -300,7 +304,7 @@ class AdminAssistantReviewListViewTest(DashboardBaseTest):
         super().setUp()
         self.assistant = User.objects.create(
             email="assistant@example.com", full_name="Assistant", role="assistant_editor",
-            specialization="law",
+            specialization="law", email_verified=True,
         )
         self.url = reverse('admin-dashboard-assistant-reviews')
         self.paper = ResearchPaper.objects.create(

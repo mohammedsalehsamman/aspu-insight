@@ -21,6 +21,7 @@ class CanUserAccessPdfTests(TestCase):
         self.superuser = make_user('super@example.com', 'reader', is_superuser=True)
         self.paper = ResearchPaper.objects.create(
             title='Paper', abstract='abstract', author=self.author, specialization='law',
+            status=ResearchPaper.Status.PUBLISHED,
         )
         self.anon = AnonymousUser()
 
@@ -106,6 +107,26 @@ class CanUserAccessPdfTests(TestCase):
         config = JournalConfiguration.objects.create(system_mode='full_open')
         JournalConfiguration.objects.filter(pk=config.pk).update(system_mode='some_future_mode')
         self.assertFalse(can_user_access_pdf(self.other_user, self.paper))
+
+    # --- unpublished papers are never exposed via system_mode, regardless of mode ---
+
+    def test_full_open_denies_non_published_paper_for_anonymous(self):
+        JournalConfiguration.objects.create(system_mode='full_open')
+        self.paper.status = ResearchPaper.Status.PENDING
+        self.paper.save(update_fields=['status'])
+        self.assertFalse(can_user_access_pdf(self.anon, self.paper))
+
+    def test_full_open_denies_non_published_paper_for_authenticated_non_author(self):
+        JournalConfiguration.objects.create(system_mode='full_open')
+        self.paper.status = ResearchPaper.Status.REJECTED
+        self.paper.save(update_fields=['status'])
+        self.assertFalse(can_user_access_pdf(self.other_user, self.paper))
+
+    def test_author_still_allowed_on_non_published_paper(self):
+        JournalConfiguration.objects.create(system_mode='full_open')
+        self.paper.status = ResearchPaper.Status.PENDING
+        self.paper.save(update_fields=['status'])
+        self.assertTrue(can_user_access_pdf(self.author, self.paper))
 
 
 class HasActiveSubscriptionIsDeadCodeTests(TestCase):

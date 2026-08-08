@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 
-from accounts.permissions import IsAdmin
+from accounts.permissions import IsAdmin, IsEmailVerified
 from accounts.models import User
 from research.models import ResearchPaper, MetadataQualityReport, PaperDownload
 from editorReview.models import EditorReview
@@ -31,7 +31,7 @@ def _counts_by(queryset, field):
     return {row[field]: row['count'] for row in queryset.values(field).annotate(count=Count(field))}
 
 class AdminDashboardStatsView(APIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
 
     def get(self, request):
         last_30_days = timezone.now() - timedelta(days=30)
@@ -80,7 +80,7 @@ class AdminDashboardStatsView(APIView):
         return Response(data)
 
 class AdminPaperListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
     serializer_class = AdminResearchPaperSerializer
     queryset = ResearchPaper.objects.select_related('author', 'assigned_editor').order_by('-created_at')
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -89,12 +89,12 @@ class AdminPaperListView(generics.ListAPIView):
     ordering_fields = ['created_at', 'updated_at', 'status']
 
 class AdminPaperDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
     serializer_class = AdminResearchPaperDetailSerializer
     queryset = ResearchPaper.objects.select_related('author', 'assigned_editor')
 
 class AdminAssignEditorView(APIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
 
     def patch(self, request, pk):
         try:
@@ -134,7 +134,7 @@ class AdminAssignEditorView(APIView):
         return Response(AdminResearchPaperSerializer(paper).data)
 
 class AdminEditorReviewListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
     serializer_class = EditorReviewSerializer
     queryset = EditorReview.objects.select_related('editor', 'paper').order_by('-reviewed_at')
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -142,7 +142,7 @@ class AdminEditorReviewListView(generics.ListAPIView):
     ordering_fields = ['reviewed_at']
 
 class AdminAssistantReviewListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
     serializer_class = AssistantReviewSerializer
     queryset = AssistantReview.objects.select_related('assistant', 'paper').order_by('-reviewed_at')
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
@@ -150,7 +150,7 @@ class AdminAssistantReviewListView(generics.ListAPIView):
     ordering_fields = ['reviewed_at']
 
 class AdminCommitteeListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, IsEmailVerified]
     serializer_class = CommitteeDetailsSerializer
     queryset = Committee.objects.select_related('editor', 'paper', 'paper__author').order_by('-created_at')
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]

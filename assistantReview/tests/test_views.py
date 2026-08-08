@@ -11,18 +11,23 @@ User = get_user_model()
 
 class AssistantReviewAPIViewTests(APITestCase):
     def setUp(self):
-        self.author = User.objects.create(email="author@example.com", full_name="Author", specialization="law")
+        self.author = User.objects.create(
+            email="author@example.com", full_name="Author", specialization="law", email_verified=True,
+        )
         self.assistant = User.objects.create(
             email="assistant@example.com", full_name="Assistant", role="assistant_editor", specialization="law",
+            email_verified=True,
         )
         self.admin = User.objects.create(
-            email="admin@example.com", full_name="Admin", role="admin", specialization="law",
+            email="admin@example.com", full_name="Admin", role="admin", specialization="law", email_verified=True,
         )
         self.reviewer = User.objects.create(
             email="reviewer@example.com", full_name="Reviewer", role="reviewer", specialization="law",
+            email_verified=True,
         )
         self.non_reviewer = User.objects.create(
             email="notreviewer@example.com", full_name="Not Reviewer", role="editor", specialization="law",
+            email_verified=True,
         )
         self.paper = ResearchPaper.objects.create(
             title="Paper", abstract="abstract", author=self.author,

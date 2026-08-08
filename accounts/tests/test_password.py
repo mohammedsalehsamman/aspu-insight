@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -47,6 +48,7 @@ class ChangePasswordAPITest(APITestCase):
 class PasswordResetAPITest(APITestCase):
 
     def setUp(self):
+        cache.clear()
         self.request_url = reverse('auth:auth-password-reset')
         self.confirm_url = reverse('auth:auth-password-reset-confirm')
         self.user = User.objects.create_user(

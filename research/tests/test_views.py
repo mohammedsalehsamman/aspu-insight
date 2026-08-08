@@ -16,6 +16,7 @@ User = get_user_model()
 
 
 def make_user(email, role='author', **kwargs):
+    kwargs.setdefault('email_verified', True)
     return User.objects.create(email=email, full_name=email, role=role, specialization='law', **kwargs)
 
 

@@ -11,15 +11,20 @@ User = get_user_model()
 
 class EditorInitialReviewAPIViewTests(APITestCase):
     def setUp(self):
-        self.author = User.objects.create(email="author@example.com", full_name="Author", specialization="law")
+        self.author = User.objects.create(
+            email="author@example.com", full_name="Author", specialization="law", email_verified=True,
+        )
         self.editor = User.objects.create(
             email="editor@example.com", full_name="Editor", role="editor", specialization="law",
+            email_verified=True,
         )
         self.other_editor = User.objects.create(
             email="editor2@example.com", full_name="Editor Two", role="editor", specialization="law",
+            email_verified=True,
         )
         self.reviewer = User.objects.create(
             email="reviewer@example.com", full_name="Reviewer", role="reviewer", specialization="law",
+            email_verified=True,
         )
         self.paper = ResearchPaper.objects.create(
             title="Paper", abstract="abstract", author=self.author,
@@ -85,9 +90,12 @@ class EditorInitialReviewAPIViewTests(APITestCase):
 
 class EditorFinalReviewAPIViewTests(APITestCase):
     def setUp(self):
-        self.author = User.objects.create(email="author@example.com", full_name="Author", specialization="law")
+        self.author = User.objects.create(
+            email="author@example.com", full_name="Author", specialization="law", email_verified=True,
+        )
         self.editor = User.objects.create(
             email="editor@example.com", full_name="Editor", role="editor", specialization="law",
+            email_verified=True,
         )
         self.paper = ResearchPaper.objects.create(
             title="Paper", abstract="abstract", author=self.author,
@@ -143,9 +151,12 @@ class EditorFinalReviewAPIViewTests(APITestCase):
 
 class PublishPaperAPIViewTests(APITestCase):
     def setUp(self):
-        self.author = User.objects.create(email="author@example.com", full_name="Author", specialization="law")
+        self.author = User.objects.create(
+            email="author@example.com", full_name="Author", specialization="law", email_verified=True,
+        )
         self.editor = User.objects.create(
             email="editor@example.com", full_name="Editor", role="editor", specialization="law",
+            email_verified=True,
         )
         self.paper = ResearchPaper.objects.create(
             title="Paper", abstract="abstract", author=self.author,

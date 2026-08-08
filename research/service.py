@@ -1,6 +1,7 @@
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from rest_framework.exceptions import ValidationError
 from research.models import ResearchPaper
 from committees.models import Committee, CommitteeMember
 from ai_service.tasks import check_paper_plagiarism_task, compute_paper_embedding_task, compute_metadata_quality_task
@@ -114,6 +115,11 @@ class ResearchPaperService:
     @staticmethod
     def can_delete(user, paper):
         return ResearchPaperService.can_update(user, paper)
+
+    @staticmethod
+    def check_assigned_editor(paper, editor):
+        if paper.assigned_editor_id and paper.assigned_editor_id != editor.user_id and editor.role != 'admin':
+            raise ValidationError("This paper is assigned to a different editor.")
 
     @staticmethod
     def update_paper(paper, validated_data):

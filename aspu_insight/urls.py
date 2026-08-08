@@ -69,27 +69,6 @@ urlpatterns = [
     ),
 
     path(
-        'api/schema/schemaAspu2004/',
-        SpectacularAPIView.as_view(),
-        name='schema'
-    ),
-
-    path(
-        'api/docs/',
-        SpectacularSwaggerView.as_view(
-            url_name='schema'
-        ),
-        name='swagger-ui'
-    ),
-
-    path(
-        'api/redoc/redocAspu2004/',
-        SpectacularRedocView.as_view(
-            url_name='schema'
-        ),
-        name='redoc'
-    ),
-    path(
         'api/v1/committees-app/', include('committees.urls')
         ),
 
@@ -101,6 +80,32 @@ urlpatterns = [
 ]
 
 if settings.DEBUG:
+
+    urlpatterns += [
+
+        path(
+            'api/schema/schemaAspu2004/',
+            SpectacularAPIView.as_view(),
+            name='schema'
+        ),
+
+        path(
+            'api/docs/',
+            SpectacularSwaggerView.as_view(
+                url_name='schema'
+            ),
+            name='swagger-ui'
+        ),
+
+        path(
+            'api/redoc/redocAspu2004/',
+            SpectacularRedocView.as_view(
+                url_name='schema'
+            ),
+            name='redoc'
+        ),
+
+    ]
 
     urlpatterns += static(
         settings.MEDIA_URL,

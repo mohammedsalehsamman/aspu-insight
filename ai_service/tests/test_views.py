@@ -26,6 +26,7 @@ def _minimal_pdf_bytes():
 
 
 def make_user(email, role="author", **kwargs):
+    kwargs.setdefault('email_verified', True)
     return User.objects.create_user(
         email=email, full_name="Test User", password="pass1234", specialization="law", role=role, **kwargs
     )

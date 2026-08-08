@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 import pyotp
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -38,6 +39,7 @@ class Enable2FAAPITest(APITestCase):
 class Confirm2FAAPITest(APITestCase):
 
     def setUp(self):
+        cache.clear()
         self.url = reverse('auth:auth-2fa-confirm')
         self.user = make_user(role='author')
         self.user.generate_2fa_secret()
@@ -64,6 +66,7 @@ class Confirm2FAAPITest(APITestCase):
 class LoginAndVerify2FAFlowTest(APITestCase):
 
     def setUp(self):
+        cache.clear()
         self.login_url = reverse('auth:auth-login')
         self.verify_url = reverse('auth:auth-2fa-verify')
         self.user = make_user(role='author', password='TwoFAPass123!')

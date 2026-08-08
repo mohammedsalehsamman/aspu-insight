@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsEditor, IsAssistantEditor
+from accounts.permissions import IsEditor, IsAssistantEditor, IsEmailVerified
 from .models import IEEECheckReport, ClaimEvidenceGraphReport
 from .serializers import (
     IEEECheckReportSerializer,
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class KeywordSuggestionView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request, *args, **kwargs):
         text = (request.data.get('text') or '').strip()
@@ -58,7 +58,7 @@ class KeywordSuggestionView(APIView):
 class IEEECheckView(APIView):
 
     parser_classes  = [MultiPartParser, FormParser]
-    permission_classes = [IsEditor | IsAssistantEditor]
+    permission_classes = [IsEditor | IsAssistantEditor, IsEmailVerified]
 
     def post(self, request, *args, **kwargs):
         document_file = request.FILES.get('document_file')
@@ -109,7 +109,7 @@ class IEEECheckView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class IEEEReportListView(APIView):
-    permission_classes = [IsEditor | IsAssistantEditor]
+    permission_classes = [IsEditor | IsAssistantEditor, IsEmailVerified]
 
     def get(self, request, *args, **kwargs):
         reports = IEEECheckReport.objects.all()
@@ -127,7 +127,7 @@ class IEEEReportListView(APIView):
         return Response(serializer.data)
 
 class IEEEReportDetailView(APIView):
-    permission_classes = [IsEditor | IsAssistantEditor]
+    permission_classes = [IsEditor | IsAssistantEditor, IsEmailVerified]
 
     def _get_report(self, pk):
         try:
@@ -157,7 +157,7 @@ class IEEEReportDetailView(APIView):
 class ClaimEvidenceGraphAnalyzeView(APIView):
 
     parser_classes = [MultiPartParser, FormParser]
-    permission_classes = [IsEditor | IsAssistantEditor]
+    permission_classes = [IsEditor | IsAssistantEditor, IsEmailVerified]
 
     def post(self, request, *args, **kwargs):
         document_file = request.FILES.get('document_file')
@@ -224,7 +224,7 @@ class ClaimEvidenceGraphAnalyzeView(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class ClaimEvidenceGraphReportListView(APIView):
-    permission_classes = [IsEditor | IsAssistantEditor]
+    permission_classes = [IsEditor | IsAssistantEditor, IsEmailVerified]
 
     def get(self, request, *args, **kwargs):
         reports = ClaimEvidenceGraphReport.objects.all()
@@ -242,7 +242,7 @@ class ClaimEvidenceGraphReportListView(APIView):
         return Response(serializer.data)
 
 class ClaimEvidenceGraphReportDetailView(APIView):
-    permission_classes = [IsEditor | IsAssistantEditor]
+    permission_classes = [IsEditor | IsAssistantEditor, IsEmailVerified]
 
     def _get_report(self, pk):
         try:

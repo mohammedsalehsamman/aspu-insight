@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -8,6 +9,7 @@ from accounts.models import User
 class LoginAPITest(APITestCase):
 
     def setUp(self):
+        cache.clear()
         self.url = reverse('auth:auth-login')
         self.user = User.objects.create_user(
             email='login@example.com',

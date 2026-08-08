@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
@@ -7,6 +8,7 @@ from axes.models import AccessAttempt
 
 class AxesFailureTrackingTests(APITestCase):
     def setUp(self):
+        cache.clear()
         self.url = reverse('auth:auth-login')
         self.user = make_user(role='author', password='CorrectPass123!')
 

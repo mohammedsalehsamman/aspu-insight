@@ -34,12 +34,16 @@ class PublishPaperAssignedEditorTests(TestCase):
 class PublishPaperAPIViewAssignedEditorTests(APITestCase):
 
     def setUp(self):
-        self.author = User.objects.create(email="author2@example.com", full_name="Author", specialization="law")
+        self.author = User.objects.create(
+            email="author2@example.com", full_name="Author", specialization="law", email_verified=True,
+        )
         self.assigned_editor = User.objects.create(
             email="assigned2@example.com", full_name="Assigned Editor", role="editor", specialization="law",
+            email_verified=True,
         )
         self.other_editor = User.objects.create(
             email="other2@example.com", full_name="Other Editor", role="editor", specialization="law",
+            email_verified=True,
         )
         self.paper = ResearchPaper.objects.create(
             title="Paper", abstract="abstract", author=self.author,

@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
-from accounts.permissions import IsEditor
+from accounts.permissions import IsEditor, IsEmailVerified
 from research.service import ResearchPaperService
 from editorReview.models import EditorReview
 from editorReview.serializers import (
@@ -14,7 +14,7 @@ from editorReview.services import EditorReviewService
 
 class EditorInitialReviewAPIView(APIView):
 
-    permission_classes = [IsEditor]
+    permission_classes = [IsEditor, IsEmailVerified]
 
     def get(self, request, paper_id):
 
@@ -54,7 +54,7 @@ class EditorInitialReviewAPIView(APIView):
 
 class EditorFinalReviewAPIView(APIView):
 
-    permission_classes = [IsEditor]
+    permission_classes = [IsEditor, IsEmailVerified]
 
     def get(self, request, paper_id):
 
@@ -94,7 +94,7 @@ class EditorFinalReviewAPIView(APIView):
 
 class PublishPaperAPIView(APIView):
 
-    permission_classes = [IsEditor]
+    permission_classes = [IsEditor, IsEmailVerified]
 
     def post(self, request, paper_id):
 

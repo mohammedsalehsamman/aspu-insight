@@ -1,18 +1,28 @@
+import logging
+
 from django.http import FileResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny, IsAuthenticated
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny, IsAuthenticated, SAFE_METHODS
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
+from accounts.permissions import IsEmailVerified
 from .models import ResearchPaper, PlagiarismReport, MetadataQualityReport, PaperDownload
 from .serializers import ResearchPaperDetailSerializer, PlagiarismReportSerializer, MetadataQualityReportSerializer
 from configuration.models import JournalConfiguration
 from .service import ResearchPaperService
 
+logger = logging.getLogger(__name__)
+
 class ResearchPaperListCreateAPIView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
     parser_classes = [MultiPartParser, FormParser]
+
+    def get_permissions(self):
+        if self.request.method in SAFE_METHODS:
+            return [permission() for permission in self.permission_classes]
+        return [IsAuthenticated(), IsEmailVerified()]
 
     def get(self, request):
         search = request.query_params.get('search')
@@ -30,8 +40,12 @@ class ResearchPaperListCreateAPIView(APIView):
                 )
                 output_serializer = ResearchPaperDetailSerializer(paper, context={'request': request})
                 return Response(output_serializer.data, status=status.HTTP_201_CREATED)
-            except Exception as e:
-                return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception:
+                logger.exception("Failed to create research paper (user_id=%s)", request.user.user_id)
+                return Response(
+                    {"error": "حدث خطأ غير متوقع أثناء إنشاء البحث. حاول مرة أخرى لاحقاً."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class SmartSearchAPIView(APIView):
@@ -70,6 +84,11 @@ class SimilarPapersAPIView(APIView):
 
 class ResearchPaperDetailAPIView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in SAFE_METHODS:
+            return [permission() for permission in self.permission_classes]
+        return [IsAuthenticated(), IsEmailVerified()]
 
     def get_object(self, paper_id):
         try:
@@ -136,6 +155,8 @@ class ResearchPaperDownloadAPIView(APIView):
 
         if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
             return serve()
+        if paper.status != ResearchPaper.Status.PUBLISHED:
+            return Response(status=status.HTTP_403_FORBIDDEN)
         config = JournalConfiguration.objects.first()
         current_mode = config.system_mode if config else 'full_open'
         if current_mode == 'full_open':
@@ -145,7 +166,7 @@ class ResearchPaperDownloadAPIView(APIView):
         return Response(status=status.HTTP_403_FORBIDDEN)
 
 class ResearchPaperPlagiarismReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request, paper_id):
         paper = get_object_or_404(ResearchPaper, id=paper_id)
@@ -168,7 +189,7 @@ class ResearchPaperPlagiarismReportView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class MetadataQualityReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request, paper_id):
         paper = get_object_or_404(ResearchPaper, id=paper_id)
@@ -191,7 +212,7 @@ class MetadataQualityReportView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class AuthorDashboardAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request):
         papers = ResearchPaperService.get_author_dashboard_papers(request.user)

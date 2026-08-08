@@ -6,6 +6,7 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from committees.models import Committee, CommitteeMember
 from research.models import ResearchPaper
+from research.service import ResearchPaperService
 from notifications.models import Notification
 from notifications.services import NotificationService
 
@@ -29,6 +30,8 @@ class CommitteeService:
             paper = ResearchPaper.objects.get(id=paper_id)
         except ResearchPaper.DoesNotExist:
             raise NotFound("البحث غير موجود.")
+
+        ResearchPaperService.check_assigned_editor(paper, user)
 
         all_reviewers = User.objects.filter(role='reviewer').exclude(user_id=paper.author_id)
 
@@ -58,6 +61,8 @@ class CommitteeService:
             paper = ResearchPaper.objects.get(id=paper_id)
         except ResearchPaper.DoesNotExist:
             raise NotFound("البحث غير موجود.")
+
+        ResearchPaperService.check_assigned_editor(paper, user)
 
         existing = Committee.objects.filter(paper=paper).first()
         if existing:
@@ -347,6 +352,17 @@ class CommitteeService:
             paper = ResearchPaper.objects.select_related('author').get(id=paper_id)
         except ResearchPaper.DoesNotExist:
             raise NotFound("Research paper not found")
+
+        allowed = (
+            user.is_staff
+            or user == paper.author
+            or getattr(user, 'role', '') == 'admin'
+            or paper.assigned_editor_id == getattr(user, 'user_id', None)
+            or Committee.objects.filter(paper=paper, editor=user).exists()
+            or CommitteeMember.objects.filter(committee__paper=paper, user=user).exists()
+        )
+        if not allowed:
+            raise PermissionDenied("غير مصرح لك بعرض تفاصيل هذا البحث.")
 
         from configuration.security import can_user_access_pdf
         is_blinded = not can_user_access_pdf(user, paper)

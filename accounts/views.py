@@ -23,10 +23,14 @@ from .serializers import (
     PasswordResetConfirmSerializer, EmailVerifySerializer,
     UserListSerializer, UserSerializer, UserUpdateSerializer,
 )
-from .utils import create_token_for_user, verify_token, send_email_verification, send_password_reset_email
+from .utils import (
+    create_token_for_user, verify_token, send_email_verification, send_password_reset_email,
+    is_otp_locked, register_otp_failure, reset_otp_attempts,
+)
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'register'
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -75,6 +79,7 @@ class VerifyEmailView(APIView):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'login'
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data, context={'request': request})
@@ -116,6 +121,7 @@ class LogoutView(APIView):
 
 class Verify2FAView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'otp'
 
     def post(self, request):
         pre_auth_token_str = request.data.get('pre_auth_token')
@@ -141,12 +147,20 @@ class Verify2FAView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'المستخدم غير موجود.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        if is_otp_locked(user.user_id):
+            return Response(
+                {'error': 'محاولات كثيرة جداً. حاول مرة أخرى لاحقاً.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         if not user.verify_otp(str(otp_code).strip()):
+            register_otp_failure(user.user_id)
             return Response(
                 {'error': 'رمز المصادقة الثنائية غير صحيح أو منتهي الصلاحية.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        reset_otp_attempts(user.user_id)
         refresh = RefreshToken.for_user(user)
         user.last_login = timezone.now()
         user.save(update_fields=['last_login'])
@@ -188,6 +202,7 @@ class ChangePasswordView(APIView):
 
 class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -207,6 +222,7 @@ class PasswordResetRequestView(APIView):
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [AllowAny]
+    throttle_scope = 'password_reset'
 
     def post(self, request):
         serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -314,17 +330,26 @@ class Enable2FAView(APIView):
 
 class Confirm2FAView(APIView):
     permission_classes = [IsAuthenticated]
+    throttle_scope = 'otp'
 
     def post(self, request):
         user = request.user
         otp_code = request.data.get('otp_code')
-        
+
         if not otp_code:
             return Response({'error': 'كود الـ OTP مطلوب لإتمام عملية التأكيد.'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
+        if is_otp_locked(user.user_id):
+            return Response(
+                {'error': 'محاولات كثيرة جداً. حاول مرة أخرى لاحقاً.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+
         if user.verify_otp(otp_code):
+            reset_otp_attempts(user.user_id)
             return Response({'message': 'تم تفعيل المصادقة الثنائية بنجاح وحسابك أصبح محمياً الآن.'}, status=status.HTTP_200_OK)
 
+        register_otp_failure(user.user_id)
         user.two_factor_secret = None
         user.save(update_fields=['two_factor_secret'])
         return Response({'error': 'رمز التحقق التجريبي غير صحيح، فشلت عملية الربط.'}, status=status.HTTP_400_BAD_REQUEST)

@@ -3,12 +3,13 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, NotFound
+from accounts.permissions import IsEmailVerified
 from .services import CommitteeService
 from .serializers import CommitteeMemberUserSerializer, CommitteeDetailsSerializer
 from .models import Committee
 
 class CreateCommitteeAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request, paper_id):
         primary_ids = request.data.get('primary_users', [])
@@ -25,7 +26,7 @@ class CreateCommitteeAPIView(APIView):
         return Response({"detail": "تم إنشاء اللجنة وإرسال الطلبات بنجاح."}, status=status.HTTP_201_CREATED)
 
 class ReviewerResponseAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request, member_id):
         is_approved = request.data.get('is_approved')
@@ -38,7 +39,7 @@ class ReviewerResponseAPIView(APIView):
         return Response({"detail": "تم تسجيل ردك بنجاح وتحديث حالة اللجنة."}, status=status.HTTP_200_OK)
 
 class SubmitReviewDecisionAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request, member_id):
         decision = request.data.get('decision')
@@ -53,7 +54,7 @@ class SubmitReviewDecisionAPIView(APIView):
         return Response({"detail": "تم إرسال قرارك العلمي وحفظه بنجاح."}, status=status.HTTP_200_OK)
 
 class FetchResearchPaperDetailsAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request, paper_id):
         response_data, is_blinded = CommitteeService.get_research_paper_details(
@@ -63,7 +64,7 @@ class FetchResearchPaperDetailsAPIView(APIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 class GetAvailableReviewersAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request, paper_id):
         reviewers = CommitteeService.get_available_reviewers(
@@ -75,7 +76,7 @@ class GetAvailableReviewersAPIView(APIView):
 
 class CommitteeDetailAPIView(APIView):
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request, paper_id):
         user = request.user

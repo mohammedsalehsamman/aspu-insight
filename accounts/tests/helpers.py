@@ -17,6 +17,7 @@ def make_user(role='author', **kwargs):
         'password': 'TestPass123!',
         'role': role,
         'specialization': 'علوم الحاسوب',
+        'email_verified': True,
     }
     defaults.update(kwargs)
     return User.objects.create_user(**defaults)

@@ -91,10 +91,14 @@ DATABASES = {
 
 AUTH_USER_MODEL = 'accounts.User'
 
+# AxesStandaloneBackend يجب أن يكون أولاً: django.contrib.auth.authenticate() يتوقف عند أول
+# backend يُعيد مستخدماً غير None. لو بقي EmailBackend أولاً فهو يُعيد المستخدم فور صحة كلمة
+# المرور، فلا يُستشار axes إطلاقاً على النجاح ويُصبح AXES_FAILURE_LIMIT بلا أثر فعلي رغم أن
+# axes يُسجّل المحاولات الفاشلة بشكل صحيح عبر الإشارات بمعزل عن هذا الترتيب.
 AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
     'accounts.backends.EmailBackend',
     'django.contrib.auth.backends.ModelBackend',
-    'axes.backends.AxesStandaloneBackend',
 ]
 
 REST_FRAMEWORK = {
@@ -112,6 +116,19 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',
+        'user': '300/min',
+        'login': '5/min',
+        'otp': '10/min',
+        'password_reset': '3/hour',
+        'register': '10/hour',
+    },
 }
 
 SIMPLE_JWT = {
@@ -198,11 +215,45 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'ASPU Insight ',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    # طبقة حماية احتياطية: مسارات التوثيق نفسها مُسجَّلة فقط خلف DEBUG في urls.py (راجع
+    # نمط media/static هناك)، لكن هذا يمنع أيضاً الوصول العلني في حال تُرك DEBUG=True خطأً.
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAdminUser'],
 }
 
-AXES_FAILURE_LIMIT = 4            
-AXES_COOLOFF_TIME = 2                   
+AXES_FAILURE_LIMIT = 4
+AXES_COOLOFF_TIME = 2
 AXES_RESET_ON_SUCCESS = True
+
+# لا تُحدّ من حجم الملفات المرفوعة (pdf_file/profile_picture) بذاتها — أول قيمة تُحدّد
+# فقط حجم حقول multipart غير-الملفات وأجسام JSON، والثانية عتبة الانتقال للقرص فقط،
+# وليست حداً للرفض. الحد الفعلي لحجم الملفات يبقى من مسؤولية research/validators.py
+# وaccounts/validators.py، بالإضافة لـ client_max_body_size على مستوى nginx في الإنتاج.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+
+os.makedirs(BASE_DIR / 'logs', exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {'format': '{asctime} {levelname} {name} {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'verbose'},
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs' / 'app.log',
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
+    },
+    'root': {'handlers': ['console', 'file'], 'level': 'INFO'},
+    'loggers': {
+        'django': {'handlers': ['console', 'file'], 'level': 'INFO', 'propagate': False},
+    },
+}
 
 HF_HOME = str(BASE_DIR / '.hf_cache')
 os.environ.setdefault('HF_HOME', HF_HOME)

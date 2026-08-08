@@ -11,6 +11,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import IsEmailVerified
 from notifications.cache import (
     UNREAD_COUNT_TIMEOUT,
     WS_TICKET_TIMEOUT,
@@ -31,7 +32,7 @@ class NotificationListAPIView(generics.ListAPIView):
     """قائمة إشعارات المستخدم الحالي فقط — لا يُقبل أبداً معرّف مستخدم من مدخلات العميل."""
 
     serializer_class = NotificationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['is_read', 'notification_type']
 
@@ -49,7 +50,7 @@ class NotificationGroupedListAPIView(APIView):
     إشعار فيها + عدد إشعاراتها الكلي وغير المقروء. group_key الفارغ (لا نوع/هدف مشترك حقيقي)
     يُستبعَد من التجميع."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request):
         groups = (
@@ -79,7 +80,7 @@ class NotificationGroupedListAPIView(APIView):
 
 
 class NotificationUnreadCountAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request):
         key = unread_count_cache_key(request.user.pk)
@@ -91,7 +92,7 @@ class NotificationUnreadCountAPIView(APIView):
 
 
 class NotificationMarkReadAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request, pk):
         notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
@@ -100,7 +101,7 @@ class NotificationMarkReadAPIView(APIView):
 
 
 class NotificationMarkAllReadAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request):
         updated = Notification.objects.filter(recipient=request.user, is_read=False).update(
@@ -118,7 +119,7 @@ class NotificationPreferenceAPIView(APIView):
     (نفس مبدأ UserNotificationPreference الموثَّق في notifications/models.py).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     @staticmethod
     def _serialize(notification_type, channels):
@@ -168,7 +169,7 @@ class NotificationWSTicketAPIView(APIView):
     الاتصال بـ ws(s)://.../ws/notifications/?ticket=<ticket> فور استلامها.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request):
         ticket = secrets.token_urlsafe(32)
@@ -181,7 +182,7 @@ class DeviceTokenAPIView(APIView):
     يستهلكها اليوم). التسجيل يُعيد ربط الرمز بالمستخدم الحالي دوماً (update_or_create) — نفس
     جهاز الجوال قد يُستخدم من حساب آخر لاحقاً (تسجيل خروج/دخول)، والرمز نفسه لا يتغيّر."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def post(self, request):
         serializer = DeviceTokenSerializer(data=request.data)

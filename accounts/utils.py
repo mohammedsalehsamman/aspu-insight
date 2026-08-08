@@ -3,9 +3,30 @@ import secrets
 import uuid
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
+
+OTP_MAX_ATTEMPTS = 5
+OTP_LOCKOUT_SECONDS = 300   # يطابق مدة صلاحية PreAuthToken (accounts/views.py)
+
+def _otp_attempts_key(user_id) -> str:
+    return f"otp:attempts:{user_id}"
+
+def is_otp_locked(user_id) -> bool:
+    return cache.get(_otp_attempts_key(user_id), 0) >= OTP_MAX_ATTEMPTS
+
+def register_otp_failure(user_id) -> None:
+    key = _otp_attempts_key(user_id)
+    if not cache.add(key, 1, timeout=OTP_LOCKOUT_SECONDS):
+        try:
+            cache.incr(key)
+        except ValueError:
+            cache.set(key, 1, timeout=OTP_LOCKOUT_SECONDS)
+
+def reset_otp_attempts(user_id) -> None:
+    cache.delete(_otp_attempts_key(user_id))
 
 def generate_secure_token():
     return secrets.token_urlsafe(64)

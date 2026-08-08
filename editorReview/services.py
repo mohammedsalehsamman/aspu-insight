@@ -27,10 +27,8 @@ class EditorReviewService:
 
     @staticmethod
     def _check_assigned_editor(paper, editor):
-        if paper.assigned_editor_id and paper.assigned_editor_id != editor.user_id and editor.role != 'admin':
-            raise ValidationError(
-                "This paper is assigned to a different editor."
-            )
+        from research.service import ResearchPaperService
+        return ResearchPaperService.check_assigned_editor(paper, editor)
 
     @staticmethod
     def _apply_transition(paper, editor, review, note):
@@ -136,6 +134,8 @@ class EditorReviewService:
 
     @staticmethod
     def publish_paper(paper, editor):
+
+        EditorReviewService._check_assigned_editor(paper, editor)
 
         if paper.status != ResearchPaper.Status.ACCEPTED:
             raise ValidationError(

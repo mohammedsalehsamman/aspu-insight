@@ -13,6 +13,7 @@ User = get_user_model()
 
 
 def make_user(email, role, **kwargs):
+    kwargs.setdefault('email_verified', True)
     return User.objects.create(email=email, full_name=email.split('@')[0], role=role, specialization='law', **kwargs)
 
 
@@ -151,7 +152,16 @@ class FetchResearchPaperDetailsViewTests(APITestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_authenticated_user_gets_paper_details(self):
+    def test_unrelated_authenticated_user_denied(self):
+        # Reviewer has no committee membership on this paper — must not see its details (IDOR fix).
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_committee_member_gets_paper_details(self):
+        editor = make_user('editor4details@example.com', 'editor')
+        committee = Committee.objects.create(paper=self.paper, editor=editor, status='pending')
+        CommitteeMember.objects.create(committee=committee, user=self.reviewer, role='primary')
         self.client.force_authenticate(user=self.reviewer)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)

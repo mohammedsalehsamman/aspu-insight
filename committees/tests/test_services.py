@@ -441,6 +441,8 @@ class GetResearchPaperDetailsTests(TestCase):
 
     @patch('configuration.security.can_user_access_pdf', return_value=False)
     def test_reviewer_sees_anonymous_author_when_blinded(self, mock_access):
+        committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+        CommitteeMember.objects.create(committee=committee, user=self.reviewer, role='primary', is_substitute=False)
         data, is_blinded = CommitteeService.get_research_paper_details(self.reviewer, self.paper.id)
         self.assertTrue(is_blinded)
         self.assertEqual(data['author_name'], 'Anonymous Author (Hidden for Committee Review)')
@@ -448,6 +450,8 @@ class GetResearchPaperDetailsTests(TestCase):
 
     @patch('configuration.security.can_user_access_pdf', return_value=False)
     def test_editor_still_sees_author_name_even_when_blinded(self, mock_access):
+        self.paper.assigned_editor = self.editor
+        self.paper.save(update_fields=['assigned_editor'])
         data, is_blinded = CommitteeService.get_research_paper_details(self.editor, self.paper.id)
         self.assertTrue(is_blinded)
         self.assertEqual(data['author_name'], str(self.author))
