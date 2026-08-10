@@ -174,6 +174,43 @@ class FetchResearchPaperDetailsViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
+class CommitteeInvitationDetailViewTests(APITestCase):
+    def setUp(self):
+        self.editor = make_user('editor@example.com', 'editor')
+        self.author = make_user('author@example.com', 'author')
+        self.reviewer = make_user('rev@example.com', 'reviewer')
+        self.paper = ResearchPaper.objects.create(
+            title='Paper', abstract='abstract', author=self.author, specialization='law',
+        )
+        self.committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+        self.member = CommitteeMember.objects.create(committee=self.committee, user=self.reviewer, role='primary')
+        self.url = reverse('committee-invitation-detail', kwargs={'member_id': self.member.id})
+
+    def test_unauthenticated_denied(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_reviewer_sees_committee_id_paper_title_and_abstract(self):
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['committee_id'], self.committee.id)
+        self.assertEqual(response.data['paper_title'], self.paper.title)
+        self.assertEqual(response.data['paper_abstract'], self.paper.abstract)
+
+    @patch('committees.views.CommitteeService.get_committee_invitation', side_effect=PermissionDenied())
+    def test_non_reviewer_forbidden(self, mock_get):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_other_reviewers_invitation_not_found(self):
+        other_reviewer = make_user('other-rev@example.com', 'reviewer')
+        self.client.force_authenticate(user=other_reviewer)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
 class CommitteeDetailViewTests(APITestCase):
     def setUp(self):
         self.editor = make_user('editor@example.com', 'editor')

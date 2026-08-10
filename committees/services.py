@@ -217,6 +217,21 @@ class CommitteeService:
         return member
 
     @staticmethod
+    def get_committee_invitation(user, member_id):
+        if getattr(user, 'role', '') != 'reviewer':
+            raise PermissionDenied()
+
+        try:
+            member = CommitteeMember.objects.select_related('committee', 'committee__paper').get(
+                id=member_id,
+                user=user
+            )
+        except CommitteeMember.DoesNotExist:
+            raise NotFound()
+
+        return member
+
+    @staticmethod
     def submit_review_decision(user, member_id, decision, comment):
         if getattr(user, 'role', '') != 'reviewer':
             raise PermissionDenied()

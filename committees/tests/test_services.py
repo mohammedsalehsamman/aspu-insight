@@ -243,6 +243,33 @@ class HandleReviewerResponseTests(TestCase):
         self.assertEqual(self.primary_members[0].response, 'declined')
 
 
+class GetCommitteeInvitationTests(TestCase):
+    def setUp(self):
+        self.editor = make_user('editor@example.com', 'editor')
+        self.author = make_user('author@example.com', 'author')
+        self.reviewer = make_user('rev@example.com', 'reviewer')
+        self.other_reviewer = make_user('other-rev@example.com', 'reviewer')
+        self.paper = ResearchPaper.objects.create(
+            title='Paper', abstract='abstract', author=self.author, specialization='law',
+        )
+        self.committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+        self.member = CommitteeMember.objects.create(committee=self.committee, user=self.reviewer, role='primary')
+
+    def test_non_reviewer_denied(self):
+        with self.assertRaises(PermissionDenied):
+            CommitteeService.get_committee_invitation(self.editor, self.member.id)
+
+    def test_member_not_found_for_wrong_user(self):
+        with self.assertRaises(NotFound):
+            CommitteeService.get_committee_invitation(self.other_reviewer, self.member.id)
+
+    def test_returns_member_with_related_committee_and_paper(self):
+        member = CommitteeService.get_committee_invitation(self.reviewer, self.member.id)
+        self.assertEqual(member.committee_id, self.committee.id)
+        self.assertEqual(member.committee.paper.title, self.paper.title)
+        self.assertEqual(member.committee.paper.abstract, self.paper.abstract)
+
+
 class SubmitReviewDecisionTests(TestCase):
     def setUp(self):
         self.editor = make_user('editor@example.com', 'editor')

@@ -16,6 +16,15 @@ class CommitteeMemberSerializer(serializers.ModelSerializer):
         model = CommitteeMember
         fields = ['id', 'user', 'role', 'response', 'paper_decision', 'comments', 'assigned_at']
 
+class CommitteeInvitationSerializer(serializers.ModelSerializer):
+    committee_id = serializers.IntegerField(source='committee.id', read_only=True)
+    paper_title = serializers.CharField(source='committee.paper.title', read_only=True)
+    paper_abstract = serializers.CharField(source='committee.paper.abstract', read_only=True)
+
+    class Meta:
+        model = CommitteeMember
+        fields = ['id', 'committee_id', 'paper_title', 'paper_abstract']
+
 class CommitteeDetailsSerializer(serializers.ModelSerializer):
     members = serializers.SerializerMethodField()
     editor_name = serializers.CharField(source='editor.full_name', read_only=True)

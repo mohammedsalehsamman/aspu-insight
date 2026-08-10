@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, NotFound
 from accounts.permissions import IsEmailVerified
 from .services import CommitteeService
-from .serializers import CommitteeMemberUserSerializer, CommitteeDetailsSerializer
+from .serializers import CommitteeMemberUserSerializer, CommitteeDetailsSerializer, CommitteeInvitationSerializer
 from .models import Committee
 
 class CreateCommitteeAPIView(APIView):
@@ -72,6 +72,17 @@ class GetAvailableReviewersAPIView(APIView):
             paper_id=paper_id
         )
         serializer = CommitteeMemberUserSerializer(reviewers, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CommitteeInvitationDetailAPIView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, member_id):
+        member = CommitteeService.get_committee_invitation(
+            user=request.user,
+            member_id=member_id
+        )
+        serializer = CommitteeInvitationSerializer(member)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class CommitteeDetailAPIView(APIView):
