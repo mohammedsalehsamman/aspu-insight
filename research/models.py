@@ -48,7 +48,7 @@ class ResearchPaper(models.Model):
     class Meta:
         db_table = 'ResearchPaper'
 
-    def str(self):
+    def __str__(self):
         return self.title
 
 class PlagiarismReport(models.Model):
@@ -68,7 +68,7 @@ class PlagiarismReport(models.Model):
     ai_keywords = models.JSONField(default=list, blank=True)
     checked_at = models.DateTimeField(auto_now_add=True)
 
-    def str(self):
+    def __str__(self):
         return f"Report for {self.paper.title}"
 
 class MetadataQualityReport(models.Model):
@@ -126,7 +126,7 @@ class PlagiarismSource(models.Model):
     own_text_snippet = models.TextField(default='', help_text="النص من البحث المُقدَّم الذي طابق المصدر")
     source_text_snippet = models.TextField(blank=True, default='', help_text="النص المقابل من المصدر (بحث آخر داخلي، أو ملخص/نص خارجي)")
 
-    def str(self):
+    def __str__(self):
         return self.source_title or (self.matched_paper.title if self.matched_paper else 'Unknown source')
 
 class PaperChunkEmbedding(models.Model):
@@ -148,7 +148,7 @@ class PaperChunkEmbedding(models.Model):
     class Meta:
         ordering = ['chunk_index']
 
-    def str(self):
+    def __str__(self):
         return f"Chunk {self.chunk_index} of {self.paper.title}"
 
 class PaperEmbedding(models.Model):
@@ -156,7 +156,7 @@ class PaperEmbedding(models.Model):
     embedding_vector = models.JSONField()
     updated_at = models.DateTimeField(auto_now=True)
 
-    def str(self):
+    def __str__(self):
         return f"Embedding for {self.paper.title}"
 
 class PaperDownload(models.Model):
@@ -170,5 +170,5 @@ class PaperDownload(models.Model):
     class Meta:
         ordering = ['-downloaded_at']
 
-    def str(self):
+    def __str__(self):
         return f"Download of {self.paper.title} at {self.downloaded_at}"

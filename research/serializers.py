@@ -57,12 +57,18 @@ class ResearchPaperDetailSerializer(serializers.ModelSerializer):
             'assistant_editor_report', 'is_reviewed_by_assistant', 'review_blindness_type'
         ]
         read_only_fields = [
-            'review_blindness_type',
             # status/is_reviewed_by_assistant/rejection_reason only change through the
             # assistantReview/editorReview pipeline (which also logs ResearchHistory);
             # a raw PUT here must never let an author self-approve or self-publish.
             'status', 'is_reviewed_by_assistant', 'rejection_reason',
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance is not None:
+            # Settable only at creation — changing it later (e.g. mid-review) could
+            # unmask the author/reviewers to each other.
+            self.fields['review_blindness_type'].read_only = True
 
     def get_author_name(self, obj):
         request = self.context.get('request')

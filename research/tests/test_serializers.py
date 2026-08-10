@@ -27,7 +27,9 @@ class MetaConfigurationTests(TestCase):
     """Regression coverage for a fix: status/is_reviewed_by_assistant/rejection_reason
     used to be writable ModelSerializer fields with no read_only override, which let
     ResearchPaperDetailAPIView.put() save them straight from client input (self-publish,
-    self-approve). They're now declared read_only alongside review_blindness_type."""
+    self-approve). They're now declared read_only. review_blindness_type is writable only
+    at creation (no instance) — locked read_only once an instance exists, so an author
+    can't flip blinding mid-review to unmask reviewers/author to each other."""
 
     def test_declared_fields(self):
         expected = {
@@ -38,10 +40,10 @@ class MetaConfigurationTests(TestCase):
         }
         self.assertEqual(set(ResearchPaperDetailSerializer.Meta.fields), expected)
 
-    def test_status_is_reviewed_by_assistant_rejection_reason_and_blindness_are_read_only(self):
+    def test_status_is_reviewed_by_assistant_and_rejection_reason_are_read_only(self):
         self.assertEqual(
             set(ResearchPaperDetailSerializer.Meta.read_only_fields),
-            {'review_blindness_type', 'status', 'is_reviewed_by_assistant', 'rejection_reason'},
+            {'status', 'is_reviewed_by_assistant', 'rejection_reason'},
         )
 
     def test_status_and_is_reviewed_by_assistant_are_read_only_at_the_serializer_field_level(self):
@@ -49,6 +51,17 @@ class MetaConfigurationTests(TestCase):
         self.assertTrue(serializer.fields['status'].read_only)
         self.assertTrue(serializer.fields['is_reviewed_by_assistant'].read_only)
         self.assertTrue(serializer.fields['rejection_reason'].read_only)
+
+    def test_review_blindness_type_is_writable_with_no_instance(self):
+        serializer = ResearchPaperDetailSerializer()
+        self.assertFalse(serializer.fields['review_blindness_type'].read_only)
+
+    def test_review_blindness_type_is_read_only_once_an_instance_exists(self):
+        author = make_user('author@example.com')
+        paper = ResearchPaper.objects.create(
+            title='Paper', abstract='a', author=author, specialization='law',
+        )
+        serializer = ResearchPaperDetailSerializer(paper)
         self.assertTrue(serializer.fields['review_blindness_type'].read_only)
 
     def test_is_valid_silently_drops_status_and_is_reviewed_by_assistant_changes(self):
