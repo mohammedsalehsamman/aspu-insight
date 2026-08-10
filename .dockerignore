@@ -1,0 +1,37 @@
+# بيئة التطوير المحلية - لا تُنسخ لصورة Docker
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+.git/
+.github/
+.vscode/
+.claude/
+
+# قاعدة البيانات المحلية والملفات المرفوعة (تُدار عبر volumes في الإنتاج، لا تُخبَز في الصورة)
+db.sqlite3
+db.sqlite3-journal
+media/
+
+# نماذج ML الضخمة - تُركَب كـ volume من السيرفر (راجع docker-compose.yml)، لا تُنسخ داخل صورة الـ build
+ai_service/ml_models/
+my-model/
+.hf_cache/
+
+# ملفات اختبار وتغطية الكود - غير مطلوبة في صورة الإنتاج
+.coverage
+.coveragerc
+htmlcov/
+tests_common/
+loadtest/
+celery_broker/
+
+# بيئة محلية وأسرار - لا تُخبَز أبداً داخل الصورة
+.env
+.env.*
+!.env.production.example
+
+# ملفات متفرقة
+*.md
+*.log
+staticfiles/
