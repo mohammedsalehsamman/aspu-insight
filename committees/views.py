@@ -1,8 +1,10 @@
 from rest_framework.views import APIView
+from rest_framework import generics
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import PermissionDenied, NotFound
+from django_filters.rest_framework import DjangoFilterBackend
 from accounts.permissions import IsEmailVerified
 from .services import CommitteeService
 from .serializers import CommitteeMemberUserSerializer, CommitteeDetailsSerializer, CommitteeInvitationSerializer
@@ -75,7 +77,7 @@ class GetAvailableReviewersAPIView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 class CommitteeInvitationDetailAPIView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmailVerified]
 
     def get(self, request, member_id):
         member = CommitteeService.get_committee_invitation(
@@ -84,6 +86,15 @@ class CommitteeInvitationDetailAPIView(APIView):
         )
         serializer = CommitteeInvitationSerializer(member)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CommitteeInvitationListAPIView(generics.ListAPIView):
+    serializer_class = CommitteeInvitationSerializer
+    permission_classes = [IsAuthenticated, IsEmailVerified]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['response', 'role']
+
+    def get_queryset(self):
+        return CommitteeService.get_my_invitations(user=self.request.user)
 
 class CommitteeDetailAPIView(APIView):
 

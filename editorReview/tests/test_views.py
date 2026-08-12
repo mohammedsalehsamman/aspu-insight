@@ -189,3 +189,91 @@ class PublishPaperAPIViewTests(APITestCase):
         self.client.force_authenticate(user=self.editor)
         response = self.client.post(self.url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class AssignAssistantEditorAPIViewTests(APITestCase):
+    def setUp(self):
+        self.author = User.objects.create(
+            email="author@example.com", full_name="Author", specialization="law", email_verified=True,
+        )
+        self.editor = User.objects.create(
+            email="editor@example.com", full_name="Editor", role="editor", specialization="law",
+            email_verified=True,
+        )
+        self.other_editor = User.objects.create(
+            email="editor2@example.com", full_name="Editor Two", role="editor", specialization="law",
+            email_verified=True,
+        )
+        self.assistant_editor = User.objects.create(
+            email="assistant@example.com", full_name="Assistant", role="assistant_editor", specialization="law",
+            email_verified=True,
+        )
+        self.reviewer = User.objects.create(
+            email="reviewer@example.com", full_name="Reviewer", role="reviewer", specialization="law",
+            email_verified=True,
+        )
+        self.paper = ResearchPaper.objects.create(
+            title="Paper", abstract="abstract", author=self.author,
+            specialization="law", status=ResearchPaper.Status.SUBMITTED,
+        )
+        self.url = reverse("assign-assistant-editor", kwargs={"paper_id": self.paper.id})
+
+    def test_unauthenticated_cannot_access(self):
+        response = self.client.patch(
+            self.url, {"assistant_editor_id": self.assistant_editor.user_id}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_non_editor_role_forbidden(self):
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.patch(
+            self.url, {"assistant_editor_id": self.assistant_editor.user_id}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_editor_can_assign_assistant_editor(self):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.patch(
+            self.url, {"assistant_editor_id": self.assistant_editor.user_id}, format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["assigned_assistant_editor"]["user_id"], self.assistant_editor.user_id,
+        )
+        self.paper.refresh_from_db()
+        self.assertEqual(self.paper.assigned_assistant_editor, self.assistant_editor)
+
+    def test_target_user_not_assistant_editor_returns_404(self):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.patch(
+            self.url, {"assistant_editor_id": self.reviewer.user_id}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_missing_assistant_editor_id_returns_400(self):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.patch(self.url, {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_assign_for_paper_assigned_to_different_editor_returns_400(self):
+        self.paper.assigned_editor = self.other_editor
+        self.paper.save()
+
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.patch(
+            self.url, {"assistant_editor_id": self.assistant_editor.user_id}, format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_can_unassign_by_passing_null(self):
+        self.paper.assigned_assistant_editor = self.assistant_editor
+        self.paper.save()
+
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.patch(self.url, {"assistant_editor_id": None}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["assigned_assistant_editor"])
+        self.paper.refresh_from_db()
+        self.assertIsNone(self.paper.assigned_assistant_editor)

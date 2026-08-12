@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production')
 
-DEBUG = config('DEBUG', default=False, cast=bool)
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 if not DEBUG and SECRET_KEY == 'django-insecure-change-me-in-production':
     raise ImproperlyConfigured('يجب ضبط SECRET_KEY عبر متغير بيئة حقيقي عند DEBUG=False.')
@@ -16,8 +16,7 @@ if not DEBUG and SECRET_KEY == 'django-insecure-change-me-in-production':
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 INSTALLED_APPS = [
-    # daphne يجب أن يبقى أول عنصر — هو ما يجعل manage.py runserver يخدم ASGI (WebSocket)
-    # بدل WSGI العادي وحدها؛ راجع aspu_insight/asgi.py وnotifications/consumers.py.
+    
     'daphne',
     'channels',
     'django.contrib.admin',

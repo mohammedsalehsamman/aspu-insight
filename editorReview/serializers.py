@@ -3,6 +3,9 @@ from rest_framework import serializers
 from accounts.serializers import UserListSerializer
 from editorReview.models import EditorReview
 
+class AssignAssistantEditorSerializer(serializers.Serializer):
+    assistant_editor_id = serializers.IntegerField(allow_null=True, required=True)
+
 class EditorReviewSerializer(serializers.ModelSerializer):
 
     editor = UserListSerializer(read_only=True)

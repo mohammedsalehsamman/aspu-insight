@@ -270,6 +270,48 @@ class GetCommitteeInvitationTests(TestCase):
         self.assertEqual(member.committee.paper.abstract, self.paper.abstract)
 
 
+class GetMyInvitationsTests(TestCase):
+    def setUp(self):
+        self.editor = make_user('editor@example.com', 'editor')
+        self.author = make_user('author@example.com', 'author')
+        self.reviewer = make_user('rev@example.com', 'reviewer')
+        self.other_reviewer = make_user('other-rev@example.com', 'reviewer')
+        self.paper = ResearchPaper.objects.create(
+            title='Paper', abstract='abstract', author=self.author, specialization='law',
+        )
+        self.committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+
+    def test_non_reviewer_denied(self):
+        with self.assertRaises(PermissionDenied):
+            CommitteeService.get_my_invitations(self.editor)
+
+    def test_returns_only_current_users_memberships(self):
+        my_member = CommitteeMember.objects.create(committee=self.committee, user=self.reviewer, role='primary')
+        CommitteeMember.objects.create(committee=self.committee, user=self.other_reviewer, role='substitute')
+
+        result = CommitteeService.get_my_invitations(self.reviewer)
+
+        self.assertEqual(list(result), [my_member])
+
+    def test_empty_for_reviewer_with_no_memberships(self):
+        result = CommitteeService.get_my_invitations(self.reviewer)
+        self.assertEqual(result.count(), 0)
+
+    def test_ordered_by_most_recent_first(self):
+        older = CommitteeMember.objects.create(committee=self.committee, user=self.reviewer, role='primary')
+
+        other_paper = ResearchPaper.objects.create(
+            title='Paper 2', abstract='abstract', author=self.author, specialization='law',
+        )
+        other_committee = Committee.objects.create(paper=other_paper, editor=self.editor, status='pending')
+        newer = CommitteeMember.objects.create(committee=other_committee, user=self.reviewer, role='primary')
+
+        CommitteeMember.objects.filter(pk=older.pk).update(assigned_at=timezone.now() - timedelta(days=1))
+
+        result = list(CommitteeService.get_my_invitations(self.reviewer))
+        self.assertEqual(result, [newer, older])
+
+
 class SubmitReviewDecisionTests(TestCase):
     def setUp(self):
         self.editor = make_user('editor@example.com', 'editor')

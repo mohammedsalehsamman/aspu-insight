@@ -3,12 +3,14 @@ from rest_framework.response import Response
 from rest_framework import status
 
 from accounts.permissions import IsEditor, IsEmailVerified
+from accounts.serializers import UserListSerializer
 from research.service import ResearchPaperService
 from editorReview.models import EditorReview
 from editorReview.serializers import (
     EditorReviewSerializer,
     EditorInitialReviewSerializer,
     EditorFinalReviewSerializer,
+    AssignAssistantEditorSerializer,
 )
 from editorReview.services import EditorReviewService
 
@@ -109,5 +111,32 @@ class PublishPaperAPIView(APIView):
             {
                 "id": paper.id,
                 "status": paper.status,
+            }
+        )
+
+class AssignAssistantEditorAPIView(APIView):
+
+    permission_classes = [IsEditor, IsEmailVerified]
+
+    def patch(self, request, paper_id):
+
+        paper = ResearchPaperService.get_paper(paper_id)
+
+        serializer = AssignAssistantEditorSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        paper = EditorReviewService.assign_assistant_editor(
+            paper,
+            request.user,
+            serializer.validated_data["assistant_editor_id"]
+        )
+
+        return Response(
+            {
+                "id": paper.id,
+                "assigned_assistant_editor": (
+                    UserListSerializer(paper.assigned_assistant_editor).data
+                    if paper.assigned_assistant_editor else None
+                ),
             }
         )

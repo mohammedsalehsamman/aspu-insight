@@ -1,8 +1,13 @@
-from rest_framework.exceptions import ValidationError
+from django.contrib.auth import get_user_model
+from rest_framework.exceptions import ValidationError, NotFound
 
 from research.models import ResearchPaper
 from researchHistory.models import ResearchHistory
 from editorReview.models import EditorReview
+from notifications.models import Notification
+from notifications.services import NotificationService
+
+User = get_user_model()
 
 INITIAL_DECISIONS = {
     EditorReview.Decision.SEND_TO_COMMITTEE,
@@ -153,6 +158,43 @@ class EditorReviewService:
             to_status=paper.status,
             changed_by=editor,
             note="Published"
+        )
+
+        return paper
+
+    @staticmethod
+    def assign_assistant_editor(paper, editor, assistant_editor_id):
+
+        EditorReviewService._check_assigned_editor(paper, editor)
+
+        if assistant_editor_id is None:
+            paper.assigned_assistant_editor = None
+            paper.save(update_fields=["assigned_assistant_editor"])
+            return paper
+
+        try:
+            assistant_editor = User.objects.get(
+                user_id=assistant_editor_id, role="assistant_editor"
+            )
+        except User.DoesNotExist:
+            raise NotFound(
+                "المستخدم المطلوب غير موجود أو ليس مساعد محرر."
+            )
+
+        paper.assigned_assistant_editor = assistant_editor
+        paper.save(update_fields=["assigned_assistant_editor"])
+
+        NotificationService.create_notification(
+            recipient=assistant_editor,
+            notification_type=Notification.NotificationType.ASSISTANT_EDITOR_ASSIGNED,
+            actor=editor,
+            target=paper,
+            target_repr=paper.title,
+            context={
+                "paper_title": paper.title,
+                "fallback_title": "تعيينك مساعد محرر لبحث",
+                "fallback_body": f"تم تعيينك مساعد محرر مسؤولاً عن مراجعة البحث: {paper.title}",
+            },
         )
 
         return paper

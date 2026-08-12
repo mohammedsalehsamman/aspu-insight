@@ -210,6 +210,70 @@ class CommitteeInvitationDetailViewTests(APITestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_unverified_email_reviewer_forbidden(self):
+        unverified = make_user('unverified@example.com', 'reviewer', email_verified=False)
+        self.client.force_authenticate(user=unverified)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class CommitteeInvitationListViewTests(APITestCase):
+    def setUp(self):
+        self.editor = make_user('editor@example.com', 'editor')
+        self.author = make_user('author@example.com', 'author')
+        self.reviewer = make_user('rev@example.com', 'reviewer')
+        self.paper = ResearchPaper.objects.create(
+            title='Paper', abstract='abstract', author=self.author, specialization='law',
+        )
+        self.committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+        self.url = reverse('committee-invitation-list')
+
+    def test_unauthenticated_denied(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @patch('committees.views.CommitteeService.get_my_invitations')
+    def test_reviewer_lists_own_invitations(self, mock_get):
+        member = CommitteeMember.objects.create(committee=self.committee, user=self.reviewer, role='primary')
+        mock_get.return_value = CommitteeMember.objects.filter(pk=member.pk).order_by('-assigned_at')
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['results'][0]['id'], member.id)
+        self.assertEqual(response.data['results'][0]['committee_id'], self.committee.id)
+
+    @patch('committees.views.CommitteeService.get_my_invitations', side_effect=PermissionDenied())
+    def test_non_reviewer_forbidden(self, mock_get):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_response_query_param_filters(self):
+        CommitteeMember.objects.create(
+            committee=self.committee, user=self.reviewer, role='primary', response='pending'
+        )
+        other_paper = ResearchPaper.objects.create(
+            title='Paper 2', abstract='abstract', author=self.author, specialization='law',
+        )
+        other_committee = Committee.objects.create(paper=other_paper, editor=self.editor, status='pending')
+        CommitteeMember.objects.create(
+            committee=other_committee, user=self.reviewer, role='primary', response='accepted'
+        )
+
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get(self.url, {'response': 'pending'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertEqual(response.data['results'][0]['response'], 'pending')
+
+    def test_pagination_envelope_present(self):
+        CommitteeMember.objects.create(committee=self.committee, user=self.reviewer, role='primary')
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('count', response.data)
+        self.assertIn('results', response.data)
+
 
 class CommitteeDetailViewTests(APITestCase):
     def setUp(self):

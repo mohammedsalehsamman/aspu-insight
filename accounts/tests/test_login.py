@@ -50,3 +50,14 @@ class LoginAPITest(APITestCase):
             'password': 'LoginPass123!'
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('هذا الحساب معطل', str(response.data))
+
+    def test_login_inactive_user_wrong_password(self):
+        self.user.is_active = False
+        self.user.save()
+        response = self.client.post(self.url, {
+            'email': 'login@example.com',
+            'password': 'WrongPass!'
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('البريد الإلكتروني أو كلمة المرور غير صحيحة', str(response.data))

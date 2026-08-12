@@ -44,6 +44,14 @@ class ResearchPaper(models.Model):
         related_name='assigned_papers',
         limit_choices_to={'role': 'editor'},
     )
+    assigned_assistant_editor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_assistant_papers',
+        limit_choices_to={'role': 'assistant_editor'},
+    )
 
     class Meta:
         db_table = 'ResearchPaper'

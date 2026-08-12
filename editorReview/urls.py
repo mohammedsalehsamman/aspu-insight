@@ -4,9 +4,16 @@ from editorReview.views import (
     EditorInitialReviewAPIView,
     EditorFinalReviewAPIView,
     PublishPaperAPIView,
+    AssignAssistantEditorAPIView,
 )
 
 urlpatterns = [
+
+    path(
+        "papers/<int:paper_id>/assign-assistant-editor/",
+        AssignAssistantEditorAPIView.as_view(),
+        name="assign-assistant-editor"
+    ),
 
     path(
         "papers/<int:paper_id>/editor-review/initial/",

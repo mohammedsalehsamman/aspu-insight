@@ -84,6 +84,12 @@ class LoginSerializer(serializers.Serializer):
         user = authenticate(request=self.context.get('request'), email=email, password=password)
 
         if not user:
+            try:
+                inactive_user = User.objects.get(email=email)
+            except User.DoesNotExist:
+                inactive_user = None
+            if inactive_user and not inactive_user.is_active and inactive_user.check_password(password):
+                raise serializers.ValidationError('هذا الحساب معطل. تواصل مع الإدارة.')
             raise serializers.ValidationError('البريد الإلكتروني أو كلمة المرور غير صحيحة.')
 
         if not user.is_active:

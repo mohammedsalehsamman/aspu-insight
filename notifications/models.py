@@ -16,6 +16,7 @@ class Notification(models.Model):
         COMMITTEE_DEADLINE_APPROACHING = 'committee_deadline_approaching', 'اقتراب موعد اللجنة'
         COMMITTEE_DEADLINE_EXPIRED = 'committee_deadline_expired', 'انتهاء مهلة اللجنة'
         EDITOR_ASSIGNED = 'editor_assigned', 'تعيين محرر'
+        ASSISTANT_EDITOR_ASSIGNED = 'assistant_editor_assigned', 'تعيين مساعد محرر'
         REVIEWER_ASSIGNED_TO_COMMITTEE = 'reviewer_assigned_to_committee', 'تعيين محكم في لجنة'
         ROLE_CHANGED = 'role_changed', 'تغيّر الصلاحية'
         SYSTEM_ANNOUNCEMENT = 'system_announcement', 'إعلان من الإدارة'

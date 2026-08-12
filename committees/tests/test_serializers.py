@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, RequestFactory
 
 from committees.models import Committee, CommitteeMember
-from committees.serializers import CommitteeDetailsSerializer
+from committees.serializers import CommitteeDetailsSerializer, CommitteeInvitationSerializer
 from research.models import ResearchPaper
 
 User = get_user_model()
@@ -86,3 +86,40 @@ class CommitteeDetailsSerializerTests(TestCase):
         data = self._serialize(self.editor)
         self.assertEqual(data['editor_name'], self.editor.full_name)
         self.assertEqual(data['paper_title'], self.paper.title)
+
+
+class CommitteeInvitationSerializerTests(TestCase):
+    def setUp(self):
+        self.author = make_user('author@example.com', 'author')
+        self.editor = make_user('editor@example.com', 'editor')
+        self.reviewers = [make_user(f'rev{i}@example.com', 'reviewer') for i in range(3)]
+        self.paper = ResearchPaper.objects.create(
+            title='Paper', abstract='abstract', author=self.author, specialization='law',
+        )
+        self.committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+        self.members = [
+            CommitteeMember.objects.create(committee=self.committee, user=r, role='primary', is_substitute=False)
+            for r in self.reviewers
+        ]
+
+    def test_committee_member_ids_excludes_self_and_includes_peers(self):
+        data = CommitteeInvitationSerializer(self.members[0]).data
+        self.assertNotIn(self.members[0].id, data['committee_member_ids'])
+        self.assertEqual(set(data['committee_member_ids']), {self.members[1].id, self.members[2].id})
+
+    def test_committee_member_ids_excludes_substitutes(self):
+        substitute_reviewer = make_user('sub@example.com', 'reviewer')
+        substitute = CommitteeMember.objects.create(
+            committee=self.committee, user=substitute_reviewer, role='substitute', is_substitute=True
+        )
+        data = CommitteeInvitationSerializer(self.members[0]).data
+        self.assertNotIn(substitute.id, data['committee_member_ids'])
+
+    def test_committee_member_ids_empty_when_sole_member(self):
+        solo_paper = ResearchPaper.objects.create(
+            title='Solo Paper', abstract='abstract', author=self.author, specialization='law',
+        )
+        solo_committee = Committee.objects.create(paper=solo_paper, editor=self.editor, status='pending')
+        solo_member = CommitteeMember.objects.create(committee=solo_committee, user=self.reviewers[0], role='primary')
+        data = CommitteeInvitationSerializer(solo_member).data
+        self.assertEqual(data['committee_member_ids'], [])
