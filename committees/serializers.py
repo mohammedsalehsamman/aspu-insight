@@ -21,13 +21,14 @@ class CommitteeInvitationSerializer(serializers.ModelSerializer):
     paper_title = serializers.CharField(source='committee.paper.title', read_only=True)
     paper_abstract = serializers.CharField(source='committee.paper.abstract', read_only=True)
     committee_member_ids = serializers.SerializerMethodField()
+    is_committee_completed = serializers.SerializerMethodField()
 
     class Meta:
         model = CommitteeMember
         fields = [
             'id', 'committee_id', 'paper_title', 'paper_abstract',
             'role', 'response', 'paper_decision', 'is_substitute', 'assigned_at',
-            'committee_member_ids',
+            'committee_member_ids', 'is_committee_completed',
         ]
 
     def get_committee_member_ids(self, obj):
@@ -37,6 +38,9 @@ class CommitteeInvitationSerializer(serializers.ModelSerializer):
             .exclude(pk=obj.pk)
             .values_list('id', flat=True)
         )
+
+    def get_is_committee_completed(self, obj):
+        return obj.committee.status in Committee.FINAL_STATUSES
 
 class CommitteeDetailsSerializer(serializers.ModelSerializer):
     members = serializers.SerializerMethodField()

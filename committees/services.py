@@ -377,13 +377,17 @@ class CommitteeService:
         except ResearchPaper.DoesNotExist:
             raise NotFound("Research paper not found")
 
+        committee_member = CommitteeMember.objects.filter(
+            committee__paper=paper, user=user
+        ).select_related('committee').first()
+
         allowed = (
             user.is_staff
             or user == paper.author
             or getattr(user, 'role', '') == 'admin'
             or paper.assigned_editor_id == getattr(user, 'user_id', None)
             or Committee.objects.filter(paper=paper, editor=user).exists()
-            or CommitteeMember.objects.filter(committee__paper=paper, user=user).exists()
+            or committee_member is not None
         )
         if not allowed:
             raise PermissionDenied("غير مصرح لك بعرض تفاصيل هذا البحث.")
@@ -399,6 +403,12 @@ class CommitteeService:
         pdf_url = None
         if user.is_authenticated:
             if user == paper.author or user.is_staff or getattr(user, 'role', '') == 'editor' or not is_blinded:
+                pdf_url = paper.pdf_file.url if paper.pdf_file else None
+            elif committee_member is not None and committee_member.response == 'accepted':
+                # can_user_access_pdf() only reflects the journal's *public* open-access mode
+                # (and requires the paper to be published) — it knows nothing about committee
+                # review, so a reviewer who accepted their invitation still needs an explicit
+                # grant here, otherwise pdf_url stays null for every paper still in review.
                 pdf_url = paper.pdf_file.url if paper.pdf_file else None
 
         response_data = {

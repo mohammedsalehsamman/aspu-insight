@@ -1,6 +1,7 @@
 from unittest.mock import patch, MagicMock
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from datetime import timedelta
@@ -515,6 +516,33 @@ class GetResearchPaperDetailsTests(TestCase):
         data, is_blinded = CommitteeService.get_research_paper_details(self.reviewer, self.paper.id)
         self.assertTrue(is_blinded)
         self.assertEqual(data['author_name'], 'Anonymous Author (Hidden for Committee Review)')
+        self.assertIsNone(data['pdf_file'])
+
+    @patch('configuration.security.can_user_access_pdf', return_value=False)
+    def test_accepted_reviewer_gets_pdf_even_though_paper_is_unpublished(self, mock_access):
+        # can_user_access_pdf() reflects the journal's public open-access mode, which is
+        # False for an unpublished paper — but a reviewer who accepted their committee
+        # invitation must still get the pdf, otherwise they can never review it.
+        self.paper.pdf_file = SimpleUploadedFile('paper.pdf', b'%PDF-1.4 fake', content_type='application/pdf')
+        self.paper.save(update_fields=['pdf_file'])
+        committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='approved')
+        CommitteeMember.objects.create(
+            committee=committee, user=self.reviewer, role='primary', is_substitute=False,
+            response='accepted', is_approved=True,
+        )
+        data, is_blinded = CommitteeService.get_research_paper_details(self.reviewer, self.paper.id)
+        self.assertTrue(is_blinded)
+        self.assertIsNotNone(data['pdf_file'])
+
+    @patch('configuration.security.can_user_access_pdf', return_value=False)
+    def test_pending_reviewer_does_not_get_pdf(self, mock_access):
+        self.paper.pdf_file = SimpleUploadedFile('paper.pdf', b'%PDF-1.4 fake', content_type='application/pdf')
+        self.paper.save(update_fields=['pdf_file'])
+        committee = Committee.objects.create(paper=self.paper, editor=self.editor, status='pending')
+        CommitteeMember.objects.create(
+            committee=committee, user=self.reviewer, role='primary', is_substitute=False,
+        )
+        data, is_blinded = CommitteeService.get_research_paper_details(self.reviewer, self.paper.id)
         self.assertIsNone(data['pdf_file'])
 
     @patch('configuration.security.can_user_access_pdf', return_value=False)
