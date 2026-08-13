@@ -7,7 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny, IsAuthenticated, SAFE_METHODS
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.shortcuts import get_object_or_404
-from accounts.permissions import IsEmailVerified
+from accounts.permissions import IsEmailVerified, IsEditor, IsAssistantEditor
 from .models import ResearchPaper, PlagiarismReport, MetadataQualityReport, PaperDownload
 from .serializers import ResearchPaperDetailSerializer, PlagiarismReportSerializer, MetadataQualityReportSerializer
 from configuration.models import JournalConfiguration
@@ -191,25 +191,55 @@ class ResearchPaperPlagiarismReportView(APIView):
 class MetadataQualityReportView(APIView):
     permission_classes = [IsAuthenticated, IsEmailVerified]
 
+    def get_permissions(self):
+        if self.request.method in SAFE_METHODS:
+            return [permission() for permission in self.permission_classes]
+        return [(IsEditor | IsAssistantEditor)(), IsEmailVerified()]
+
     def get(self, request, paper_id):
         paper = get_object_or_404(ResearchPaper, id=paper_id)
         user = request.user
-        is_assistant = getattr(user, 'is_assistant_editor', False) or getattr(user, 'role', '') in ['assistant_editor', 'assistant', 'assistant_editor']
-        if not is_assistant and paper.author != user:
+        is_privileged_editor = IsEditor().has_permission(request, self) or IsAssistantEditor().has_permission(request, self)
+        if not is_privileged_editor and paper.author != user:
             if not ResearchPaperService.can_view(user, paper):
                 return Response({"detail": "You do not have permission to view this metadata quality report."}, status=status.HTTP_403_FORBIDDEN)
         try:
             report = MetadataQualityReport.objects.get(paper=paper)
         except MetadataQualityReport.DoesNotExist:
-            from ai_service.tasks import compute_metadata_quality_task
-            compute_metadata_quality_task(paper.id)
-            try:
-                report = MetadataQualityReport.objects.get(paper=paper)
-            except MetadataQualityReport.DoesNotExist:
-                return Response({"status": "pending"}, status=status.HTTP_202_ACCEPTED)
+            return Response({"detail": "لا يوجد تقرير جودة بيانات وصفية لهذا البحث بعد."}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = MetadataQualityReportSerializer(report, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request, paper_id):
+        paper = get_object_or_404(ResearchPaper, id=paper_id)
+        report, _ = MetadataQualityReport.objects.get_or_create(paper=paper)
+        report.status = MetadataQualityReport.Status.PENDING
+        report.error_message = ''
+        report.save(update_fields=["status", "error_message"])
+
+        from ai_service.tasks import compute_metadata_quality_task
+        try:
+            compute_metadata_quality_task.delay(paper.id)
+            response_status = status.HTTP_202_ACCEPTED
+        except Exception as e:
+            logger.exception("Metadata quality task dispatch failed for paper %s: %s", paper_id, e)
+            report.status = MetadataQualityReport.Status.FAILED
+            report.error_message = f"فشل تشغيل التقييم: {str(e)}"
+            report.save(update_fields=["status", "error_message"])
+            response_status = status.HTTP_200_OK
+
+        serializer = MetadataQualityReportSerializer(report, context={'request': request})
+        return Response(serializer.data, status=response_status)
+
+    def delete(self, request, paper_id):
+        paper = get_object_or_404(ResearchPaper, id=paper_id)
+        try:
+            report = MetadataQualityReport.objects.get(paper=paper)
+        except MetadataQualityReport.DoesNotExist:
+            return Response({"detail": "لا يوجد تقرير جودة بيانات وصفية لهذا البحث."}, status=status.HTTP_404_NOT_FOUND)
+        report.delete()
+        return Response({"message": "تم حذف تقرير جودة البيانات الوصفية بنجاح."}, status=status.HTTP_204_NO_CONTENT)
 
 class AuthorDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated, IsEmailVerified]

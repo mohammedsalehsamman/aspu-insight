@@ -343,6 +343,9 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
     'data_folder_out': str(BASE_DIR / 'celery_broker' / 'messages'),
     'data_folder_processed': str(BASE_DIR / 'celery_broker' / 'processed'),
 }
+if CELERY_BROKER_URL == 'filesystem://':
+    os.makedirs(CELERY_BROKER_TRANSPORT_OPTIONS['data_folder_in'], exist_ok=True)
+    os.makedirs(CELERY_BROKER_TRANSPORT_OPTIONS['data_folder_processed'], exist_ok=True)
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='django-db')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'

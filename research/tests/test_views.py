@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from committees.models import Committee, CommitteeMember
 from configuration.models import JournalConfiguration
-from research.models import PlagiarismReport, ResearchPaper
+from research.models import MetadataQualityReport, PlagiarismReport, ResearchPaper
 from research.service import ResearchPaperService
 
 User = get_user_model()
@@ -526,6 +526,96 @@ class PlagiarismReportViewTests(APITestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['total_similarity_score'], 77.0)
+
+
+class MetadataQualityReportViewTests(APITestCase):
+    def setUp(self):
+        self.author = make_user('author@example.com')
+        self.stranger = make_user('stranger@example.com')
+        self.editor = make_user('editor@example.com', role='editor')
+        self.assistant = make_user('assistant@example.com', role='assistant_editor')
+        self.paper = ResearchPaper.objects.create(
+            title='Paper', abstract='a', author=self.author,
+            specialization='law', status=ResearchPaper.Status.SUBMITTED,
+        )
+        self.url = reverse('paper-metadata-quality', kwargs={'paper_id': self.paper.id})
+
+
+    def test_get_unauthenticated_denied(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_get_missing_report_returns_404(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_get_author_sees_own_report(self):
+        MetadataQualityReport.objects.create(paper=self.paper, overall_score=88.0, status=MetadataQualityReport.Status.COMPLETED)
+        self.client.force_authenticate(user=self.author)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['overall_score'], 88.0)
+
+    def test_get_unrelated_user_without_view_access_denied(self):
+        MetadataQualityReport.objects.create(paper=self.paper, overall_score=50.0)
+        self.client.force_authenticate(user=self.stranger)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_get_editor_without_committee_assignment_can_still_view(self):
+        MetadataQualityReport.objects.create(paper=self.paper, overall_score=51.0, status=MetadataQualityReport.Status.COMPLETED)
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['overall_score'], 51.0)
+
+
+    def test_post_wrong_role_rejected(self):
+        self.client.force_authenticate(user=self.author)
+        response = self.client.post(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch('ai_service.tasks.compute_metadata_quality_task')
+    def test_post_editor_dispatches_task_and_returns_pending(self, mock_task):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.post(self.url)
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data['status'], 'pending')
+        mock_task.delay.assert_called_once_with(self.paper.id)
+
+    @patch('ai_service.tasks.compute_metadata_quality_task')
+    def test_post_assistant_editor_allowed(self, mock_task):
+        self.client.force_authenticate(user=self.assistant)
+        response = self.client.post(self.url)
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+
+    @patch('ai_service.tasks.compute_metadata_quality_task')
+    def test_post_task_dispatch_failure_marks_report_failed(self, mock_task):
+        mock_task.delay.side_effect = Exception("broker down")
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.post(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'failed')
+
+
+    def test_delete_wrong_role_rejected(self):
+        MetadataQualityReport.objects.create(paper=self.paper)
+        self.client.force_authenticate(user=self.author)
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_delete_missing_report_returns_404(self):
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_delete_editor_removes_report(self):
+        MetadataQualityReport.objects.create(paper=self.paper)
+        self.client.force_authenticate(user=self.editor)
+        response = self.client.delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(MetadataQualityReport.objects.filter(paper=self.paper).exists())
 
 
 class AuthorDashboardViewTests(APITestCase):
