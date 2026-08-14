@@ -250,21 +250,10 @@ class ClaimEvidenceGraphReportDetailView(APIView):
         except ClaimEvidenceGraphReport.DoesNotExist:
             return None
 
-    def _forbidden_if_not_owner(self, request, report):
-        if report.requested_by_id is None:
-            if request.user.role != 'admin':
-                return Response({"error": "غير مصرح لك بالوصول إلى هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
-        elif report.requested_by_id != request.user.pk and request.user.role != 'admin':
-            return Response({"error": "غير مصرح لك بالوصول إلى هذا التقرير"}, status=status.HTTP_403_FORBIDDEN)
-        return None
-
     def get(self, request, pk, *args, **kwargs):
         report = self._get_report(pk)
         if not report:
             return Response({"error": "التقرير غير موجود"}, status=status.HTTP_404_NOT_FOUND)
-        forbidden = self._forbidden_if_not_owner(request, report)
-        if forbidden:
-            return forbidden
         serializer = ClaimEvidenceGraphReportSerializer(report)
         return Response(serializer.data)
 
@@ -272,9 +261,6 @@ class ClaimEvidenceGraphReportDetailView(APIView):
         report = self._get_report(pk)
         if not report:
             return Response({"error": "التقرير غير موجود"}, status=status.HTTP_404_NOT_FOUND)
-        forbidden = self._forbidden_if_not_owner(request, report)
-        if forbidden:
-            return forbidden
         try:
             if report.document_file:
                 default_storage.delete(report.document_file.name)

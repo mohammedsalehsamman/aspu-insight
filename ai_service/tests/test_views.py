@@ -381,23 +381,19 @@ class ClaimEvidenceGraphReportDetailViewTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    # Regression coverage for a fix: ClaimEvidenceGraphReportDetailView._forbidden_if_not_owner
-    # (line ~262) used to compare `request.user.id`, but accounts.User's primary key field is
-    # `user_id`, not `id` — the custom user model never gets an implicit `id` AutoField. Any
-    # request that reached the `elif report.requested_by_id != request.user.id` branch (i.e.
-    # every request for a report that HAS an owner) raised an uncaught AttributeError instead of
-    # returning 200/403. Fixed by comparing against `request.user.pk` instead.
     def test_owner_viewing_own_report_succeeds(self):
         self.client.force_authenticate(user=self.owner)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.owned_report.id})
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_non_owner_viewing_report_forbidden(self):
+    # Any editor/assistant_editor/admin may view any report, matching the list endpoint
+    # (which returns all reports by default) and the sibling IEEEReportDetailView.
+    def test_non_owner_editor_viewing_report_succeeds(self):
         self.client.force_authenticate(user=self.other_editor)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.owned_report.id})
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_admin_viewing_owned_report_succeeds(self):
         self.client.force_authenticate(user=self.admin)
@@ -405,11 +401,11 @@ class ClaimEvidenceGraphReportDetailViewTests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_orphan_report_only_visible_to_admin(self):
+    def test_orphan_report_visible_to_any_editor(self):
         self.client.force_authenticate(user=self.other_editor)
         url = reverse("ai_service:claim-evidence-report-detail", kwargs={"pk": self.orphan_report.id})
         response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         self.client.force_authenticate(user=self.admin)
         response = self.client.get(url)
