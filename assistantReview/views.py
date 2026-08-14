@@ -1,8 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import SAFE_METHODS
 
-from accounts.permissions import IsAssistantEditor, IsEmailVerified
+from accounts.permissions import IsAssistantEditor, IsEditor, IsEmailVerified
 from research.service import ResearchPaperService
 from assistantReview.serializers import (
     AssistantReviewSerializer,
@@ -13,6 +14,11 @@ from assistantReview.services import AssistantReviewService
 class AssistantReviewAPIView(APIView):
 
     permission_classes = [IsAssistantEditor, IsEmailVerified]
+
+    def get_permissions(self):
+        if self.request.method in SAFE_METHODS:
+            return [(IsEditor | IsAssistantEditor)(), IsEmailVerified()]
+        return [permission() for permission in self.permission_classes]
 
     def get(self, request, paper_id):
 

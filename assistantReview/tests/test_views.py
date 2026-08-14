@@ -98,3 +98,24 @@ class AssistantReviewAPIViewTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
+
+    def test_editor_can_read_reports(self):
+        AssistantReview.objects.create(
+            paper=self.paper, assistant=self.assistant, notes="n", decision=AssistantReview.Decision.APPROVE,
+        )
+
+        self.client.force_authenticate(user=self.non_reviewer)  # role="editor"
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+    def test_editor_cannot_post_reports(self):
+        self.client.force_authenticate(user=self.non_reviewer)  # role="editor"
+        response = self.client.post(self.url, {"decision": "APPROVE", "notes": "n"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_get_forbidden_for_unrelated_role(self):
+        self.client.force_authenticate(user=self.reviewer)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
