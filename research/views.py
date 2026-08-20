@@ -156,6 +156,8 @@ class ResearchPaperDownloadAPIView(APIView):
         if user.is_authenticated and (user.is_staff or user.is_superuser or user == paper.author):
             return serve()
         if paper.status != ResearchPaper.Status.PUBLISHED:
+            if user.is_authenticated and ResearchPaperService.can_view(user, paper):
+                return serve()
             return Response(status=status.HTTP_403_FORBIDDEN)
         config = JournalConfiguration.objects.first()
         current_mode = config.system_mode if config else 'full_open'
