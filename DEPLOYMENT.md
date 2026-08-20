@@ -17,27 +17,76 @@
 | `scripts/upload_models.sh` | يرفع فقط نماذج ML الضرورية (~1.6GB) عبر rsync، ويتجاهل ~10GB تجارب قديمة |
 | `requirements.txt` | أُعيد ترميزه لـ UTF-8 (كان UTF-16 يكسر pip داخل Docker) + أُضيف `psycopg2-binary` |
 
-## 1. إنشاء السيرفر
+## 1. إنشاء السيرفر (Oracle Cloud Infrastructure - Always Free)
 
-أنشئ سيرفر Hetzner CPX31 (4 vCPU / 8GB RAM / 160GB) أو ما يعادله (راجع التقرير للمقارنة)،
-نظام Ubuntu 22.04، وأضف مفتاح SSH العام لجهازك عند الإنشاء.
+بدل الخطة الأصلية (Hetzner CPX31 مدفوع)، تم الاشتراك فعلياً في **Oracle Cloud Free Tier**. الخيار
+المناسب هنا هو شكل **Ampere A1 (ARM)** ضمن Always Free، لأنه الوحيد بموارد كافية لهذا الحمل
+(الأشكال الأخرى المجانية على OCI بـ1GB رام فقط غير كافية إطلاقاً لتحميل نماذج الذكاء الاصطناعي):
+
+1. في OCI Console: **Compute → Instances → Create Instance**.
+2. **Image and shape → Edit → Image**: اختر **Canonical Ubuntu 22.04** (تأكد من اختيار
+   الإصدار **aarch64/ARM** وليس x86_64، لأن Ampere A1 معمارية ARM).
+3. **Shape**: اضغط Change Shape → تبويب **Ampere** → **VM.Standard.A1.Flex** → اضبط
+   **4 OCPUs / 24 GB Memory** (الحد الأقصى المجاني بالكامل — أعلى فعلياً من توصية التقرير
+   الأصلي 8GB لأنه بلا أي تكلفة).
+4. **Boot volume**: وسّعه إلى ~100GB على الأقل (ضمن حصة الـ200GB Always Free) — الافتراضي 50GB
+   لا يكفي مع مكتبات torch + النماذج + نمو قاعدة البيانات.
+5. **Add SSH keys**: ولّد زوج مفاتيح جديد من نفس الصفحة ونزّل المفتاح الخاص (أو الصق مفتاحك
+   العام الموجود مسبقاً).
+6. Networking: اترك VCN الافتراضي أو أنشئ واحداً جديداً (سنعدّل قواعد الجدار في الخطوة التالية).
+7. Create.
+
+<div></div>
+
+> **ملاحظة معمارية:** كل صور Docker المستخدَمة هنا (`postgres:16-alpine`, `redis:7-alpine`,
+> `nginx:alpine`, `python:3.11-slim`) رسمية ومتعددة المعمارية (تدعم arm64)، وفهرس torch CPU
+> (`download.pytorch.org/whl/cpu`) يوفر عجلات (wheels) لـ `linux_aarch64` أيضاً — لا حاجة لتعديل
+> `Dockerfile`. تحقق فقط بعد أول `docker compose build` أن التثبيت نجح دون العودة لبناء من المصدر.
 
 ## 2. تجهيز السيرفر
 
+على عكس Hetzner (حيث الدخول مباشرة كـ`root`)، صور Ubuntu على OCI تُدخلك كمستخدم `ubuntu` مع
+صلاحيات `sudo`:
+
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh -i /path/to/private_key ubuntu@YOUR_SERVER_IP
 
-apt update && apt upgrade -y
-apt install -y docker.io docker-compose-plugin ufw rsync
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y docker.io docker-compose-plugin ufw rsync
 
-ufw allow OpenSSH
-ufw allow 80
-ufw allow 443
-ufw enable
+sudo ufw allow OpenSSH
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw enable
 
-adduser deploy
-usermod -aG docker deploy
+sudo adduser deploy
+sudo usermod -aG docker deploy
 ```
+
+### تحذير خاص بـ OCI: جدار الحماية طبقتان، ليس ufw وحده
+
+على Hetzner كان `ufw` كافياً. على Oracle Cloud هناك طبقتان إضافيتان يجب فتحهما، وإلا ستبقى
+المنافذ 80/443 مغلقة رغم `ufw` رغم أنه يظهر "Up" في `docker compose ps`:
+
+1. **Security List على مستوى الشبكة (VCN) — عبر الكونسول، ليس SSH:**
+   `Networking → Virtual Cloud Networks → (VCN الخاصة بك) → Security Lists → Default Security
+   List → Add Ingress Rules`. أضف قاعدتين: Source CIDR `0.0.0.0/0`، IP Protocol `TCP`،
+   Destination Port `80`، وأخرى لـ `443` (المنفذ 22 عادة مفتوح افتراضياً عند إنشاء VCN بالخيار
+   السريع — تحقق منه أيضاً).
+
+2. **قواعد iptables الافتراضية على صورة Ubuntu نفسها:** صور Oracle الجاهزة تأتي بقاعدة
+   `REJECT` مضبوطة مسبقاً في سلسلة `INPUT` تمنع أي منفذ غير SSH حتى لو سمح به `ufw`. تحقق أولاً:
+   ```bash
+   sudo iptables -L INPUT --line-numbers
+   ```
+   أدرج قاعدتي القبول **قبل** رقم سطر قاعدة REJECT (مثلاً إن كانت REJECT في السطر 6):
+   ```bash
+   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+   sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+   sudo netfilter-persistent save
+   ```
+   بدون هذه الخطوة تحديداً، أشهر مشكلة يواجهها مستخدمو OCI الجدد هي "docker يعمل لكن الموقع لا
+   يفتح من الخارج".
 
 ## 3. رفع الكود
 
@@ -117,9 +166,16 @@ docker compose exec web python manage.py createsuperuser
   أضفها إلى crontab.
 - **تجديد SSL شهرياً:** `docker compose run --rm certbot renew` عبر cron.
 - **مراقبة السجلات:** `docker compose logs -f web celery-worker`.
+- **تحذير خاص بـ Always Free:** Oracle قد تسترجع (reclaim) موارد Always Free تلقائياً إن بقي
+  استهلاك CPU/الشبكة/الذاكرة منخفضاً جداً لمدة 7 أيام متتالية (سيرفر خامل تقريباً بلا زوار).
+  إن كان السيرفر للعرض/المناقشة فقط بزيارات متقطعة، تأكد من هذا قبل يوم المناقشة، أو أبقِ عملية
+  خفيفة (مثل فحص دوري كل بضع ساعات) تحافظ على نشاط ملحوظ.
 
 ## قائمة تحقق سريعة
 
+- [ ] سيرفر Ampere A1 (4 OCPU/24GB) تم إنشاؤه بصورة Ubuntu 22.04 ARM
+- [ ] قواعد Security List في OCI Console مفتوحة لمنفذي 80 و443 (بالإضافة لـ ufw)
+- [ ] قاعدة iptables الافتراضية المانعة عُدِّلت للسماح بـ80/443
 - [ ] الكود مرفوع عبر git clone
 - [ ] النماذج مرفوعة عبر `scripts/upload_models.sh`
 - [ ] `.env` معبّى بالكامل (SECRET_KEY جديد، DB_PASSWORD قوي، دومين صحيح)
